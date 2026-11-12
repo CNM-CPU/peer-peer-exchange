@@ -7,15 +7,14 @@ import {
   reserveListing,
   type MarketplaceListing,
 } from './lib/listings'
+import { currencyName, foreignCurrencies } from './lib/currencies'
 import { supabase, supabaseConfigurationError } from './lib/supabase'
+import { ListingForm } from './components/ListingForm'
+import { AdminPanel } from './components/AdminPanel'
 import './App.css'
 
 type Direction = 'rub-ecusd' | 'ecusd-rub' | 'specific'
-
-const foreignCurrencies = [
-  'AED', 'AUD', 'CAD', 'CHF', 'CNY', 'EUR', 'GBP', 'GHS', 'INR', 'JPY',
-  'KES', 'NGN', 'NZD', 'RWF', 'SGD', 'TZS', 'UGX', 'USD', 'ZAR',
-]
+type MainView = 'marketplace' | 'create' | 'admin'
 
 const directionOptions: { value: Direction; label: string }[] = [
   { value: 'rub-ecusd', label: 'I have RUB → want EcoCash USD' },
@@ -25,10 +24,6 @@ const directionOptions: { value: Direction; label: string }[] = [
 
 const reservationMinutes = 20
 const refreshIntervalMs = 15_000
-
-function currencyName(currency: string) {
-  return currency === 'ECUSD' ? 'EcoCash USD' : currency
-}
 
 function formatAmount(amount: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount)
@@ -125,6 +120,9 @@ function App() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabase)
+  const [isSuspended, setIsSuspended] = useState(false)
+  const [view, setView] = useState<MainView>('marketplace')
+  const [refreshVersion, setRefreshVersion] = useState(0)
   const [email, setEmail] = useState('')
   const [isSendingLink, setIsSendingLink] = useState(false)
   const [signInMessage, setSignInMessage] = useState<string | null>(null)
@@ -138,7 +136,11 @@ function App() {
       if (active) {
         setSession(nextSession)
         setAuthReady(true)
-        if (!nextSession) setReservedListingId(null)
+        if (!nextSession) {
+          setReservedListingId(null)
+          setIsSuspended(false)
+          setView('marketplace')
+        }
       }
     })
 
@@ -170,6 +172,7 @@ function App() {
         if (!active) return
         setListings(result.listings)
         setIsDemo(result.isDemo)
+        setIsSuspended(result.isSuspended)
         setLoadError(null)
       } catch (cause) {
         if (!active) return
@@ -182,6 +185,7 @@ function App() {
     if (supabase && !session) {
       return () => { active = false }
     }
+    if (view !== 'marketplace') return () => { active = false }
 
     void refresh()
     if (!supabase) return () => { active = false }
@@ -191,7 +195,9 @@ function App() {
       active = false
       window.clearInterval(intervalId)
     }
-  }, [session])
+  }, [session, refreshVersion, view])
+
+  const isAdmin = session?.user.app_metadata.role === 'admin'
 
   const selectedPair = useMemo(() => {
     if (direction === 'rub-ecusd') return { have: 'RUB', want: 'ECUSD' }
@@ -282,6 +288,21 @@ function App() {
     }
   }
 
+  function handleListingCreated(currencyAvailable: string, currencyWanted: string) {
+    if (currencyAvailable === 'RUB' && currencyWanted === 'ECUSD') {
+      setDirection('ecusd-rub')
+    } else if (currencyAvailable === 'ECUSD' && currencyWanted === 'RUB') {
+      setDirection('rub-ecusd')
+    } else if (currencyAvailable !== 'RUB' && currencyAvailable !== 'ECUSD' && ['RUB', 'ECUSD'].includes(currencyWanted)) {
+      setDirection('specific')
+      setSpecificCurrency(currencyAvailable)
+      setPayWith(currencyWanted)
+    }
+    setFeedback('Your advert is published and available to matching users.')
+    setRefreshVersion((current) => current + 1)
+    setView('marketplace')
+  }
+
   if (supabaseConfigurationError) {
     return <main className="screen"><div className="message-panel" role="alert">{supabaseConfigurationError}</div></main>
   }
@@ -293,6 +314,36 @@ function App() {
           <span className="brand-mark" aria-hidden="true">↔</span>
           <span>peer<span className="brand-accent">exchange</span></span>
         </a>
+        {session && (
+          <nav aria-label="Main navigation" className="app-nav">
+            <button
+              aria-current={view === 'marketplace' ? 'page' : undefined}
+              className={view === 'marketplace' ? 'app-nav-active' : ''}
+              onClick={() => setView('marketplace')}
+              type="button"
+            >
+              Marketplace
+            </button>
+            <button
+              aria-current={view === 'create' ? 'page' : undefined}
+              className={view === 'create' ? 'app-nav-active' : ''}
+              onClick={() => setView('create')}
+              type="button"
+            >
+              Add advert
+            </button>
+            {isAdmin && (
+              <button
+                aria-current={view === 'admin' ? 'page' : undefined}
+                className={view === 'admin' ? 'app-nav-active' : ''}
+                onClick={() => setView('admin')}
+                type="button"
+              >
+                Admin
+              </button>
+            )}
+          </nav>
+        )}
         {session && (
           <button
             className="sign-out-button"
@@ -306,8 +357,16 @@ function App() {
 
       <section aria-labelledby="page-title" className="page-intro" id="top">
         <p className="eyebrow">Peer Exchange</p>
-        <h1 id="page-title">Find an exchange</h1>
-        <p>Choose what you have. We’ll show matching listings, best rate first.</p>
+        <h1 id="page-title">
+          {view === 'create' ? 'Share an advert' : view === 'admin' ? 'Admin dashboard' : 'Find an exchange'}
+        </h1>
+        <p>
+          {view === 'create'
+            ? 'Publish your exchange terms and let interested people contact you on WhatsApp.'
+            : view === 'admin'
+              ? 'Monitor confirmed exchanges and manage account access.'
+              : 'Choose what you have. We’ll show matching listings, best rate first.'}
+        </p>
       </section>
 
       {!authReady ? (
@@ -333,6 +392,16 @@ function App() {
           {signInMessage && <p className="success-message" role="status">{signInMessage}</p>}
           {signInError && <p className="error-message" role="alert">{signInError}</p>}
         </section>
+      ) : isSuspended ? (
+        <div className="error-message account-suspended" role="alert">
+          Your account is suspended. Contact an administrator if you believe this is a mistake.
+        </div>
+      ) : view === 'create' ? (
+        <ListingForm onListingCreated={handleListingCreated} />
+      ) : view === 'admin' && isAdmin ? (
+        <AdminPanel />
+      ) : view === 'admin' ? (
+        <div className="error-message" role="alert">Admin access is required to open this page.</div>
       ) : (
         <>
           <section aria-labelledby="direction-title" className="direction-panel">

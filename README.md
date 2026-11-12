@@ -20,6 +20,7 @@ Apply migrations in order using the Supabase CLI or SQL Editor:
 
 1. [`20261112000000_create_marketplace_listings.sql`](./supabase/migrations/20261112000000_create_marketplace_listings.sql)
 2. [`20261113000000_add_whatsapp_reservations.sql`](./supabase/migrations/20261113000000_add_whatsapp_reservations.sql)
+3. [`20261114000000_add_advert_management.sql`](./supabase/migrations/20261114000000_add_advert_management.sql)
 
 Create existing user accounts in Supabase Auth and enable the email provider. The app signs in existing users using a magic link; it does not create accounts. The Supabase auth redirect allow-list must include the app URL.
 
@@ -28,6 +29,16 @@ Advertiser contact details are available to authenticated users viewing availabl
 Pressing **Contact on WhatsApp** atomically reserves the listing for 20 minutes before opening a prefilled WhatsApp message. This global reservation removes it from all users' available listings. The user can mark the reservation completed after arranging the exchange. If left unconfirmed, polling marks it expired, then makes it available again. Authenticated clients poll every 15 seconds; listings update for other active users within that interval.
 
 Listings should store international WhatsApp numbers in E.164 format, such as `+263771234567`. The `ECUSD` currency code is used for EcoCash USD, distinct from cash USD.
+
+Signed-in users can publish adverts from **Add advert**. The advertiser's rate is want-currency per one available-currency unit. Their advert appears to other users searching the opposite direction; users do not see their own advert as a contactable listing.
+
+## Admin and analytics
+
+The admin screen is available only to accounts whose server-managed Supabase `app_metadata.role` is `admin`. Designate the initial admin in Supabase Auth (do not use user-editable `user_metadata`), then sign out and back in to refresh the role claim. Admins can view registered users and suspend/reactivate non-admin accounts; role changes and account deletion are intentionally kept in Supabase Auth rather than exposed in the app.
+
+The dashboard counts only listings explicitly marked `completed` after both parties arrange the exchange. It also shows available/reserved inventory and monthly completion counts. The migration creates restricted listing-status events (created, reserved, expired, completed, reopened) as the foundation for future analytics. Event-based monthly analytics begin when this migration is applied; the all-time completed count includes previously closed listings.
+
+Suspension is enforced by row-level security and the reservation/completion functions, not only by hiding the UI. Advert creation and listing discovery also require an active signed-in account.
 
 ## Deploy to Vercel
 
