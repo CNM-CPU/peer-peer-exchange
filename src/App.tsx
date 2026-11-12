@@ -6,9 +6,10 @@ import {
   CircleAlert,
   Globe2,
   MapPin,
+  Menu,
   Search,
   ShieldCheck,
-  Sparkles,
+  X,
 } from 'lucide-react'
 import { loadListings, type MarketplaceListing } from './lib/listings'
 import './App.css'
@@ -91,6 +92,7 @@ function App() {
   const [filter, setFilter] = useState<ListingFilter>('all')
   const [currency, setCurrency] = useState('all')
   const [search, setSearch] = useState('')
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -144,98 +146,63 @@ function App() {
     })
   }, [currency, filter, listings, search])
 
+  useEffect(() => {
+    if (!isMenuOpen) return
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMenuOpen(false)
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [isMenuOpen])
+
   return (
     <>
-      <div className="preview-banner">
-        <CircleAlert aria-hidden="true" size={15} />
-        <span>
-          Preview only. {isDemo ? 'Sample listings and rates are fictional.' : 'Rates are user-submitted and not verified.'}
-          {' '}No funds are held or exchanged on this platform.
-        </span>
-      </div>
-
       <header className="site-header">
-        <a aria-label="Peer Exchange home" className="brand" href="#top">
-          <span className="brand-mark"><ArrowLeftRight aria-hidden="true" size={19} /></span>
-          <span>peer<span className="brand-accent">exchange</span></span>
-        </a>
-        <nav aria-label="Main navigation" className="main-nav">
-          <a className="nav-link nav-link-active" href="#marketplace">Marketplace</a>
-          <a className="nav-link" href="#how-it-works">How it works</a>
-          <a className="nav-link" href="#safety">Safety</a>
-        </nav>
-        <a className="header-cta" href="#marketplace">
-          Explore listings <ArrowRight aria-hidden="true" size={15} />
-        </a>
+        <div className="header-start">
+          <button
+            aria-controls="main-menu"
+            aria-expanded={isMenuOpen}
+            aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+            className="menu-toggle"
+            onClick={() => setIsMenuOpen((open) => !open)}
+            type="button"
+          >
+            {isMenuOpen ? <X aria-hidden="true" size={21} /> : <Menu aria-hidden="true" size={21} />}
+          </button>
+          <a aria-label="Peer Exchange home" className="brand" href="#top">
+            <span className="brand-mark"><ArrowLeftRight aria-hidden="true" size={18} /></span>
+            <span>peer<span className="brand-accent">exchange</span></span>
+          </a>
+          {isMenuOpen && (
+            <nav aria-label="Main navigation" className="main-menu" id="main-menu">
+              <a href="#marketplace" onClick={() => setIsMenuOpen(false)}>Marketplace</a>
+              <a href="#safety" onClick={() => setIsMenuOpen(false)}>Safety and preview</a>
+            </nav>
+          )}
+        </div>
       </header>
 
       <main id="top">
         <section aria-labelledby="hero-title" className="hero-section">
           <div className="hero-copy">
-            <div className="eyebrow"><span className="eyebrow-dot" /> A community-first exchange marketplace</div>
-            <h1 id="hero-title">Find your next exchange <span>partner.</span></h1>
+            <h1 id="hero-title">Exchange listings for the community.</h1>
             <p className="hero-description">
-              A clearer way to find people with the currencies you need. Browse requests, compare
-              terms, and make your next connection in one place.
+              Browse what people have and need, then compare rates and terms before connecting.
             </p>
-            <div className="hero-actions">
-              <a className="button button-primary" href="#marketplace">
-                Browse the marketplace <ArrowRight aria-hidden="true" size={17} />
-              </a>
-              <a className="button button-secondary" href="#how-it-works">How it works</a>
-            </div>
             <div className="hero-footnote">
               <Globe2 aria-hidden="true" size={16} />
               Starting with Zimbabwean students in Russia
             </div>
           </div>
-
-          <div aria-label="Illustrative exchange listing preview" className="hero-visual">
-            <div className="visual-orbit orbit-one" />
-            <div className="visual-orbit orbit-two" />
-            <div className="visual-label"><Sparkles aria-hidden="true" size={14} /> A better way to connect</div>
-            <div className="exchange-preview">
-              <div className="preview-card-heading">
-                <span>EXAMPLE LISTING</span>
-                <span className="sample-pill">SAMPLE</span>
-              </div>
-              <div className="preview-currency-row">
-                <div className="preview-currency">
-                  <span className="currency-mark currency-mark-usd">$</span>
-                  <span><strong>USD</strong><small>Available</small></span>
-                </div>
-                <ArrowLeftRight aria-hidden="true" className="swap-icon" size={19} />
-                <div className="preview-currency">
-                  <span className="currency-mark currency-mark-rub">₽</span>
-                  <span><strong>RUB</strong><small>Requested</small></span>
-                </div>
-              </div>
-              <div className="preview-divider" />
-              <div className="preview-rate-row">
-                <span>Example rate</span>
-                <strong>Set by the community</strong>
-              </div>
-              <div className="preview-connection">
-                <span className="connection-avatar">A</span>
-                <span><strong>A community member</strong><small>Example profile</small></span>
-              </div>
-            </div>
-            <div className="floating-note"><ShieldCheck aria-hidden="true" size={17} /> Clear terms, before you connect</div>
-          </div>
-        </section>
-
-        <section aria-label="Marketplace benefits" className="benefit-strip">
-          <div><span className="benefit-icon"><Search aria-hidden="true" size={17} /></span><span><strong>Search in one place</strong><small>Skip the group-chat scroll</small></span></div>
-          <div><span className="benefit-icon"><ArrowLeftRight aria-hidden="true" size={17} /></span><span><strong>See both sides</strong><small>Offers and requests together</small></span></div>
-          <div><span className="benefit-icon"><ShieldCheck aria-hidden="true" size={17} /></span><span><strong>Know the terms</strong><small>Compare before connecting</small></span></div>
         </section>
 
         <section aria-labelledby="marketplace-title" className="marketplace-section" id="marketplace">
           <div className="section-heading">
             <div>
-              <div className="section-kicker">THE MARKETPLACE</div>
-              <h2 id="marketplace-title">Explore exchange listings</h2>
-              <p>Find a currency pair that fits what you have and what you need.</p>
+              <h2 id="marketplace-title">Exchange listings</h2>
+              <p>Filter offers and requests by currency or location.</p>
             </div>
             {isDemo && <span className="data-status"><span /> Sample data</span>}
           </div>
@@ -311,64 +278,19 @@ function App() {
               )}
             </div>
           ) : null}
-          <p className="marketplace-disclaimer">
-            {isDemo
-              ? 'These fictional examples demonstrate the marketplace only; they are not exchange offers or live rates.'
-              : 'Listings and rates are user-submitted. Verify all details independently; no transaction or settlement is supported.'}
+        </section>
+
+        <aside aria-label="Safety information" className="safety-note" id="safety">
+          <ShieldCheck aria-hidden="true" size={18} />
+          <p>
+            <strong>Preview only.</strong> {isDemo
+              ? 'Sample listings and rates are fictional.'
+              : 'Listings and rates are user-submitted and not verified.'}{' '}
+            No payments, identity checks, or settlement are supported. Verify details independently.
           </p>
-        </section>
-
-        <section aria-labelledby="how-title" className="how-section" id="how-it-works">
-          <div className="how-intro">
-            <div className="section-kicker">A SIMPLE FLOW</div>
-            <h2 id="how-title">From searching to connecting.</h2>
-            <p>Exchange starts with finding the right person. The marketplace helps make that first step easier.</p>
-          </div>
-          <div className="steps-grid">
-            <article className="step-card">
-              <span className="step-number">01</span>
-              <span className="step-icon"><Search aria-hidden="true" size={19} /></span>
-              <h3>Find a match</h3>
-              <p>Browse what people have and what they are looking for.</p>
-            </article>
-            <article className="step-card">
-              <span className="step-number">02</span>
-              <span className="step-icon"><ArrowLeftRight aria-hidden="true" size={19} /></span>
-              <h3>Compare terms</h3>
-              <p>Review the proposed amount, rate, location, and payment method.</p>
-            </article>
-            <article className="step-card">
-              <span className="step-number">03</span>
-              <span className="step-icon"><Globe2 aria-hidden="true" size={19} /></span>
-              <h3>Connect carefully</h3>
-              <p>Decide whether to proceed independently and only where permitted.</p>
-            </article>
-          </div>
-        </section>
-
-        <section aria-labelledby="safety-title" className="safety-section" id="safety">
-          <div className="safety-icon"><ShieldCheck aria-hidden="true" size={22} /></div>
-          <div>
-            <div className="section-kicker">SAFETY FIRST</div>
-            <h2 id="safety-title">A marketplace—not a money service.</h2>
-            <p>
-              This preview only demonstrates how people could discover listings. It does not process
-              payments, verify identities, or arrange settlement. Any real-world exchange features
-              require legal and regulatory review before launch.
-            </p>
-          </div>
-          <a className="safety-link" href="#top">Back to top <ArrowRight aria-hidden="true" size={15} /></a>
-        </section>
+        </aside>
       </main>
 
-      <footer className="site-footer">
-        <a aria-label="Peer Exchange home" className="brand footer-brand" href="#top">
-          <span className="brand-mark"><ArrowLeftRight aria-hidden="true" size={17} /></span>
-          <span>peer<span className="brand-accent">exchange</span></span>
-        </a>
-        <p>Built for communities finding a better way to connect.</p>
-        <span className="footer-note">Preview · No funds held or exchanged</span>
-      </footer>
     </>
   )
 }
