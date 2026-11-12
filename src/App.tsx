@@ -1,297 +1,437 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { ArrowDownUp, CircleAlert, LoaderCircle, ShieldCheck } from 'lucide-react'
 import {
-  ArrowLeftRight,
-  ArrowRight,
-  ChevronDown,
-  CircleAlert,
-  Globe2,
-  MapPin,
-  Menu,
-  Search,
-  ShieldCheck,
-  X,
-} from 'lucide-react'
-import { loadListings, type MarketplaceListing } from './lib/listings'
+  completeListing,
+  loadListings,
+  reserveListing,
+  type MarketplaceListing,
+} from './lib/listings'
+import { supabase, supabaseConfigurationError } from './lib/supabase'
 import './App.css'
 
-type ListingFilter = 'all' | 'have' | 'need'
+type Direction = 'rub-ecusd' | 'ecusd-rub' | 'specific'
 
-const filters: { value: ListingFilter; label: string }[] = [
-  { value: 'all', label: 'All listings' },
-  { value: 'have', label: 'I have' },
-  { value: 'need', label: 'I need' },
+const foreignCurrencies = [
+  'AED', 'AUD', 'CAD', 'CHF', 'CNY', 'EUR', 'GBP', 'GHS', 'INR', 'JPY',
+  'KES', 'NGN', 'NZD', 'RWF', 'SGD', 'TZS', 'UGX', 'USD', 'ZAR',
 ]
 
-function formatAmount(amount: number, currency: string) {
-  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount)} ${currency}`
+const directionOptions: { value: Direction; label: string }[] = [
+  { value: 'rub-ecusd', label: 'I have RUB → want EcoCash USD' },
+  { value: 'ecusd-rub', label: 'I have EcoCash USD → want RUB' },
+  { value: 'specific', label: 'I want a specific foreign currency' },
+]
+
+const reservationMinutes = 20
+const refreshIntervalMs = 15_000
+
+function currencyName(currency: string) {
+  return currency === 'ECUSD' ? 'EcoCash USD' : currency
+}
+
+function formatAmount(amount: number) {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount)
 }
 
 function formatRate(rate: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(rate)
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(rate)
 }
 
-function ListingCard({ listing }: { listing: MarketplaceListing }) {
-  const isOffer = listing.listing_type === 'have'
-  const amountCurrency = isOffer ? listing.currency_available : listing.currency_wanted
+function formatWhatsAppNumber(listing: MarketplaceListing) {
+  if (!listing.whatsapp_number) return null
+  const phone = listing.whatsapp_number.replace(/\D/g, '')
+  if (phone.length < 8 || phone.length > 15) return null
+  return `+${phone}`
+}
+
+function getWhatsAppUrl(listing: MarketplaceListing) {
+  const phone = formatWhatsAppNumber(listing)
+  if (!phone) return null
+
+  const message = `Hi ${listing.advertiser_name}, I saw your listing to exchange ${currencyName(listing.currency_available)} for ${currencyName(listing.currency_wanted)}. Is it still available?`
+  return `https://wa.me/${phone.slice(1)}?text=${encodeURIComponent(message)}`
+}
+
+function ListingCard({
+  listing,
+  isDemo,
+  isContacting,
+  isBusy,
+  hasReservation,
+  onContact,
+}: {
+  listing: MarketplaceListing
+  isDemo: boolean
+  isContacting: boolean
+  isBusy: boolean
+  hasReservation: boolean
+  onContact: (listing: MarketplaceListing) => void
+}) {
+  const whatsappUrl = getWhatsAppUrl(listing)
+  const whatsappNumber = formatWhatsAppNumber(listing)
+  let contactLabel = 'Contact on WhatsApp'
+  if (isDemo) contactLabel = 'WhatsApp unavailable in preview'
+  else if (isContacting) contactLabel = 'Reserving listing…'
+  else if (isBusy) contactLabel = 'Contact in progress'
+  else if (hasReservation) contactLabel = 'Complete current reservation first'
 
   return (
     <article className="listing-card">
-      <div className="listing-card-top">
-        <span className={`listing-kind ${isOffer ? 'listing-kind-have' : 'listing-kind-need'}`}>
-          <span className="kind-dot" />
-          {isOffer ? 'I have' : 'I need'}
+      <div className="listing-heading">
+        <h3>{listing.advertiser_name}</h3>
+        <span className="listing-rate">
+          1 {currencyName(listing.currency_available)} = {formatRate(listing.exchange_rate)}{' '}
+          {currencyName(listing.currency_wanted)}
         </span>
-        <span className="listing-category">Community listing</span>
       </div>
-
-      <div className="listing-route">
-        <span className={`currency-mark currency-mark-${listing.currency_available.toLowerCase()}`}>
-          {listing.currency_available.slice(0, 1)}
+      <p className="listing-pair">
+        {currencyName(listing.currency_available)} <ArrowDownUp aria-hidden="true" size={14} />{' '}
+        {currencyName(listing.currency_wanted)}
+      </p>
+      <p className="listing-amount">
+        Available: {formatAmount(listing.amount)} {currencyName(listing.currency_available)}
+      </p>
+      <button
+        className="contact-button"
+        disabled={isDemo || !whatsappUrl || isBusy || hasReservation}
+        onClick={() => onContact(listing)}
+        type="button"
+      >
+        {isContacting ? <LoaderCircle aria-hidden="true" className="spinner" size={16} /> : null}
+        <span className="contact-copy">
+          {contactLabel}
+          {!isDemo && whatsappNumber && <small>{whatsappNumber}</small>}
         </span>
-        <span className="currency-code">{listing.currency_available}</span>
-        <ArrowRight aria-hidden="true" size={16} />
-        <span className={`currency-mark currency-mark-${listing.currency_wanted.toLowerCase()}`}>
-          {listing.currency_wanted.slice(0, 1)}
-        </span>
-        <span className="currency-code">{listing.currency_wanted}</span>
-      </div>
-
-      <div className="listing-amount-row">
-        <div>
-          <p className="listing-amount">{formatAmount(listing.amount, amountCurrency)}</p>
-          <p className="listing-amount-caption">
-            {isOffer ? 'Available to exchange' : 'Looking to receive'}
-          </p>
-        </div>
-        <div className="rate-block">
-          <span className="rate-label">Indicative rate</span>
-          <span className="rate-value">
-            1 {listing.currency_available} = {formatRate(listing.exchange_rate)} {listing.currency_wanted}
-          </span>
-        </div>
-      </div>
-
-      {listing.note && <p className="listing-note">{listing.note}</p>}
-
-      <div className="listing-meta">
-        <span>
-          <MapPin aria-hidden="true" size={14} />
-          {listing.location || 'Location not specified'}
-        </span>
-        <span>{listing.payment_methods.length > 0 ? listing.payment_methods.join(', ') : 'Flexible payment'}</span>
-      </div>
+      </button>
+      {!isDemo && !whatsappUrl && (
+        <p className="contact-unavailable">This advertiser has not added a valid WhatsApp number.</p>
+      )}
     </article>
   )
 }
 
 function App() {
+  const [direction, setDirection] = useState<Direction>('rub-ecusd')
+  const [specificCurrency, setSpecificCurrency] = useState('EUR')
+  const [payWith, setPayWith] = useState('RUB')
   const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [isDemo, setIsDemo] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<ListingFilter>('all')
-  const [currency, setCurrency] = useState('all')
-  const [search, setSearch] = useState('')
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [contactingId, setContactingId] = useState<string | null>(null)
+  const [reservedListingId, setReservedListingId] = useState<string | null>(null)
+  const [isCompletingReservation, setIsCompletingReservation] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(!supabase)
+  const [email, setEmail] = useState('')
+  const [isSendingLink, setIsSendingLink] = useState(false)
+  const [signInMessage, setSignInMessage] = useState<string | null>(null)
+  const [signInError, setSignInError] = useState<string | null>(null)
 
   useEffect(() => {
-    let isMounted = true
+    if (!supabase) return
 
-    loadListings()
-      .then(({ listings: loadedListings, isDemo: usingDemoData }) => {
-        if (!isMounted) return
-        setListings(loadedListings)
-        setIsDemo(usingDemoData)
+    let active = true
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) {
+        setSession(nextSession)
+        setAuthReady(true)
+        if (!nextSession) setReservedListingId(null)
+      }
+    })
+
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error) setSignInError(error.message)
+        setSession(data.session)
       })
       .catch((cause: unknown) => {
-        if (!isMounted) return
-        setLoadError(cause instanceof Error ? cause.message : 'An unexpected error occurred.')
+        if (active) setSignInError(cause instanceof Error ? cause.message : 'Could not check sign-in status.')
       })
       .finally(() => {
-        if (isMounted) setIsLoading(false)
+        if (active) setAuthReady(true)
       })
 
     return () => {
-      isMounted = false
+      active = false
+      subscription.unsubscribe()
     }
   }, [])
 
-  const currencies = useMemo(
-    () =>
-      [...new Set(listings.flatMap((listing) => [listing.currency_available, listing.currency_wanted]))]
-        .sort(),
-    [listings],
-  )
-
-  const visibleListings = useMemo(() => {
-    const query = search.trim().toLowerCase()
-
-    return listings.filter((listing) => {
-      const matchesType = filter === 'all' || listing.listing_type === filter
-      const matchesCurrency =
-        currency === 'all' ||
-        listing.currency_available === currency ||
-        listing.currency_wanted === currency
-      const searchableText = [
-        listing.currency_available,
-        listing.currency_wanted,
-        listing.location,
-        listing.note ?? '',
-        ...listing.payment_methods,
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return matchesType && matchesCurrency && (!query || searchableText.includes(query))
-    })
-  }, [currency, filter, listings, search])
-
   useEffect(() => {
-    if (!isMenuOpen) return
+    let active = true
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsMenuOpen(false)
+    const refresh = async () => {
+      try {
+        const result = await loadListings()
+        if (!active) return
+        setListings(result.listings)
+        setIsDemo(result.isDemo)
+        setLoadError(null)
+      } catch (cause) {
+        if (!active) return
+        setLoadError(cause instanceof Error ? cause.message : 'An unexpected error occurred.')
+      } finally {
+        if (active) setIsLoading(false)
+      }
     }
 
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [isMenuOpen])
+    if (supabase && !session) {
+      return () => { active = false }
+    }
+
+    void refresh()
+    if (!supabase) return () => { active = false }
+
+    const intervalId = window.setInterval(() => { void refresh() }, refreshIntervalMs)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [session])
+
+  const selectedPair = useMemo(() => {
+    if (direction === 'rub-ecusd') return { have: 'RUB', want: 'ECUSD' }
+    if (direction === 'ecusd-rub') return { have: 'ECUSD', want: 'RUB' }
+    return { have: payWith, want: specificCurrency }
+  }, [direction, payWith, specificCurrency])
+
+  const matchingListings = useMemo(
+    () =>
+      listings
+        .filter((listing) =>
+          listing.currency_available === selectedPair.want &&
+          listing.currency_wanted === selectedPair.have,
+        )
+        .sort((a, b) => a.exchange_rate - b.exchange_rate),
+    [listings, selectedPair],
+  )
+
+  async function handleSignIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) return
+    setIsSendingLink(true)
+    setSignInError(null)
+    setSignInMessage(null)
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: false },
+      })
+      if (error) {
+        setSignInError(error.message)
+      } else {
+        setSignInMessage('Check your email for a secure sign-in link.')
+      }
+    } catch (cause) {
+      setSignInError(cause instanceof Error ? cause.message : 'Could not send the sign-in link.')
+    } finally {
+      setIsSendingLink(false)
+    }
+  }
+
+  async function handleContact(listing: MarketplaceListing) {
+    const url = getWhatsAppUrl(listing)
+    if (!url || isDemo) return
+
+    const whatsappWindow = window.open('about:blank', '_blank')
+    if (!whatsappWindow) {
+      setFeedback('Allow pop-ups to continue to WhatsApp. The listing has not been reserved.')
+      return
+    }
+    whatsappWindow.opener = null
+    setContactingId(listing.id)
+    setFeedback(null)
+
+    try {
+      await reserveListing(listing.id)
+      setListings((current) => current.filter((item) => item.id !== listing.id))
+      whatsappWindow.location.href = url
+      setReservedListingId(listing.id)
+      setFeedback(`Listing reserved for ${reservationMinutes} minutes. Continue your conversation on WhatsApp.`)
+    } catch (cause) {
+      whatsappWindow.close()
+      setFeedback(cause instanceof Error ? cause.message : 'Could not reserve this listing.')
+      if (cause instanceof Error && cause.message.includes('no longer available')) {
+        try {
+          const result = await loadListings()
+          setListings(result.listings)
+        } catch (refreshCause) {
+          setLoadError(refreshCause instanceof Error ? refreshCause.message : 'Could not refresh listings.')
+        }
+      }
+    } finally {
+      setContactingId(null)
+    }
+  }
+
+  async function handleCompleteReservation() {
+    if (!reservedListingId) return
+    setIsCompletingReservation(true)
+    try {
+      await completeListing(reservedListingId)
+      setReservedListingId(null)
+      setFeedback('Exchange marked completed. Thanks for keeping the listing board up to date.')
+    } catch (cause) {
+      setFeedback(cause instanceof Error ? cause.message : 'Could not complete this reservation.')
+    } finally {
+      setIsCompletingReservation(false)
+    }
+  }
+
+  if (supabaseConfigurationError) {
+    return <main className="screen"><div className="message-panel" role="alert">{supabaseConfigurationError}</div></main>
+  }
 
   return (
-    <>
-      <header className="site-header">
-        <div className="header-start">
+    <main className="screen">
+      <header className="app-header">
+        <a aria-label="Peer Exchange home" className="brand" href="#top">
+          <span className="brand-mark" aria-hidden="true">↔</span>
+          <span>peer<span className="brand-accent">exchange</span></span>
+        </a>
+        {session && (
           <button
-            aria-controls="main-menu"
-            aria-expanded={isMenuOpen}
-            aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-            className="menu-toggle"
-            onClick={() => setIsMenuOpen((open) => !open)}
+            className="sign-out-button"
+            onClick={() => { void supabase?.auth.signOut() }}
             type="button"
           >
-            {isMenuOpen ? <X aria-hidden="true" size={21} /> : <Menu aria-hidden="true" size={21} />}
+            Sign out
           </button>
-          <a aria-label="Peer Exchange home" className="brand" href="#top">
-            <span className="brand-mark"><ArrowLeftRight aria-hidden="true" size={18} /></span>
-            <span>peer<span className="brand-accent">exchange</span></span>
-          </a>
-          {isMenuOpen && (
-            <nav aria-label="Main navigation" className="main-menu" id="main-menu">
-              <a href="#marketplace" onClick={() => setIsMenuOpen(false)}>Marketplace</a>
-              <a href="#safety" onClick={() => setIsMenuOpen(false)}>Safety and preview</a>
-            </nav>
-          )}
-        </div>
+        )}
       </header>
 
-      <main id="top">
-        <section aria-labelledby="hero-title" className="hero-section">
-          <div className="hero-copy">
-            <h1 id="hero-title">Exchange listings for the community.</h1>
-            <p className="hero-description">
-              Browse what people have and need, then compare rates and terms before connecting.
-            </p>
-            <div className="hero-footnote">
-              <Globe2 aria-hidden="true" size={16} />
-              Starting with Zimbabwean students in Russia
-            </div>
-          </div>
+      <section aria-labelledby="page-title" className="page-intro" id="top">
+        <p className="eyebrow">Peer Exchange</p>
+        <h1 id="page-title">Find an exchange</h1>
+        <p>Choose what you have. We’ll show matching listings, best rate first.</p>
+      </section>
+
+      {!authReady ? (
+        <div aria-label="Checking sign-in" className="loading-state"><LoaderCircle className="spinner" size={20} /></div>
+      ) : supabase && !session ? (
+        <section aria-labelledby="sign-in-title" className="auth-panel">
+          <h2 id="sign-in-title">Sign in to browse</h2>
+          <p>We’ll email you a secure sign-in link. An existing account is required.</p>
+          <form onSubmit={(event) => { void handleSignIn(event) }}>
+            <label htmlFor="email">Email address</label>
+            <input
+              autoComplete="email"
+              id="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+            <button className="contact-button" disabled={isSendingLink} type="submit">
+              {isSendingLink ? 'Sending link…' : 'Email me a sign-in link'}
+            </button>
+          </form>
+          {signInMessage && <p className="success-message" role="status">{signInMessage}</p>}
+          {signInError && <p className="error-message" role="alert">{signInError}</p>}
         </section>
-
-        <section aria-labelledby="marketplace-title" className="marketplace-section" id="marketplace">
-          <div className="section-heading">
-            <div>
-              <h2 id="marketplace-title">Exchange listings</h2>
-              <p>Filter offers and requests by currency or location.</p>
-            </div>
-            {isDemo && <span className="data-status"><span /> Sample data</span>}
-          </div>
-
-          <div className="marketplace-toolbar">
-            <div className="listing-tabs" aria-label="Filter listings">
-              {filters.map((item) => (
-                <button
-                  aria-pressed={filter === item.value}
-                  className={filter === item.value ? 'listing-tab listing-tab-active' : 'listing-tab'}
-                  key={item.value}
-                  onClick={() => setFilter(item.value)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
+      ) : (
+        <>
+          <section aria-labelledby="direction-title" className="direction-panel">
+            <h2 id="direction-title">What do you have?</h2>
+            <fieldset className="direction-options">
+              <legend className="sr-only">Choose your exchange direction</legend>
+              {directionOptions.map((option) => (
+                <label className="direction-option" key={option.value}>
+                  <input
+                    checked={direction === option.value}
+                    name="direction"
+                    onChange={() => setDirection(option.value)}
+                    type="radio"
+                    value={option.value}
+                  />
+                  <span>{option.label}</span>
+                </label>
               ))}
-            </div>
-            <div className="marketplace-search">
-              <label className="search-field">
-                <Search aria-hidden="true" size={17} />
-                <span className="sr-only">Search listings</span>
-                <input
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search currency or location"
-                  type="search"
-                  value={search}
-                />
-              </label>
-              <label className="currency-select">
-                <span className="sr-only">Filter by currency</span>
-                <select onChange={(event) => setCurrency(event.target.value)} value={currency}>
-                  <option value="all">All currencies</option>
-                  {currencies.map((code) => <option key={code} value={code}>{code}</option>)}
-                </select>
-                <ChevronDown aria-hidden="true" size={15} />
-              </label>
-            </div>
-          </div>
+            </fieldset>
+            {direction === 'specific' && (
+              <div className="specific-controls">
+                <label>
+                  Currency you want
+                  <select
+                    onChange={(event) => setSpecificCurrency(event.target.value)}
+                    value={specificCurrency}
+                  >
+                    {foreignCurrencies.map((code) => <option key={code} value={code}>{currencyName(code)}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Pay with
+                  <select onChange={(event) => setPayWith(event.target.value)} value={payWith}>
+                    <option value="RUB">RUB</option>
+                    <option value="ECUSD">EcoCash USD</option>
+                  </select>
+                </label>
+              </div>
+            )}
+          </section>
 
-          {loadError && (
-            <div className="load-error" role="alert">
-              <CircleAlert aria-hidden="true" size={18} />
-              <span>Marketplace could not be loaded: {loadError}</span>
+          <section aria-labelledby="listings-title" className="results-section">
+            <div className="results-heading">
+              <div>
+                <h2 id="listings-title">Available listings</h2>
+                <p>
+                  {currencyName(selectedPair.have)} → {currencyName(selectedPair.want)}
+                  <span className="sort-note"> · lowest cost first</span>
+                </p>
+              </div>
+              {isDemo && <span className="preview-label">Preview data</span>}
             </div>
-          )}
 
-          {isLoading ? (
-            <div aria-label="Loading listings" className="listing-grid">
-              {[1, 2, 3].map((item) => <div aria-hidden="true" className="listing-skeleton" key={item} />)}
-            </div>
-          ) : !loadError && visibleListings.length > 0 ? (
-            <div className="listing-grid">
-              {visibleListings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}
-            </div>
-          ) : !loadError ? (
-            <div className="empty-state">
-              <span className="empty-icon"><Search aria-hidden="true" size={21} /></span>
-              <h3>{listings.length === 0 ? 'No open listings yet' : 'No matching listings'}</h3>
-              <p>
-                {listings.length === 0
-                  ? 'There are no open listings in the marketplace right now.'
-                  : 'Try a different search or clear one of your filters.'}
-              </p>
-              {listings.length > 0 && (
+            {loadError && <div className="error-message" role="alert"><CircleAlert aria-hidden="true" size={17} />{loadError}</div>}
+            {feedback && <div className="feedback-message" role="status">{feedback}</div>}
+            {reservedListingId && (
+              <div className="reservation-panel">
+                <p>After confirming the exchange with the advertiser on WhatsApp, mark this reservation complete.</p>
                 <button
-                  className="text-button"
-                  onClick={() => { setSearch(''); setCurrency('all'); setFilter('all') }}
+                  className="complete-button"
+                  disabled={isCompletingReservation}
+                  onClick={() => { void handleCompleteReservation() }}
                   type="button"
                 >
-                  Clear filters
+                  {isCompletingReservation ? 'Updating…' : 'Mark exchange completed'}
                 </button>
-              )}
-            </div>
-          ) : null}
-        </section>
+              </div>
+            )}
+            {isLoading ? (
+              <div aria-label="Loading listings" className="loading-state"><LoaderCircle className="spinner" size={20} /><span>Loading listings…</span></div>
+            ) : !loadError && matchingListings.length === 0 ? (
+              <div className="empty-state">
+                <h3>No listings right now</h3>
+                <p>Check back soon for a matching exchange.</p>
+              </div>
+            ) : !loadError ? (
+              <div aria-label="Listings sorted by best rate" className="listing-list">
+                {matchingListings.map((listing) => (
+                  <ListingCard
+                    isContacting={contactingId === listing.id}
+                    isBusy={contactingId !== null}
+                    isDemo={isDemo}
+                    hasReservation={reservedListingId !== null}
+                    key={listing.id}
+                    listing={listing}
+                    onContact={(selectedListing) => { void handleContact(selectedListing) }}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </section>
 
-        <aside aria-label="Safety information" className="safety-note" id="safety">
-          <ShieldCheck aria-hidden="true" size={18} />
-          <p>
-            <strong>Preview only.</strong> {isDemo
-              ? 'Sample listings and rates are fictional.'
-              : 'Listings and rates are user-submitted and not verified.'}{' '}
-            No payments, identity checks, or settlement are supported. Verify details independently.
-          </p>
-        </aside>
-      </main>
-
-    </>
+          <aside className="safety-note">
+            <ShieldCheck aria-hidden="true" size={17} />
+            <p>Peer Exchange is a listing board only. All negotiation and settlement happen directly on WhatsApp. No payments are processed here.</p>
+          </aside>
+        </>
+      )}
+    </main>
   )
 }
 

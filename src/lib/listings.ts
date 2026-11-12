@@ -4,49 +4,49 @@ import type { MarketplaceListingRow } from '../types/database'
 export type MarketplaceListing = Pick<
   MarketplaceListingRow,
   | 'id'
+  | 'advertiser_name'
+  | 'whatsapp_number'
   | 'listing_type'
   | 'currency_available'
   | 'currency_wanted'
   | 'amount'
   | 'exchange_rate'
-  | 'payment_methods'
-  | 'location'
-  | 'note'
+  | 'created_at'
 >
 
 const demoListings: MarketplaceListing[] = [
   {
     id: 'sample-1',
+    advertiser_name: 'Sample advertiser',
+    whatsapp_number: null,
     listing_type: 'have',
-    currency_available: 'USD',
+    currency_available: 'ECUSD',
     currency_wanted: 'RUB',
     amount: 350,
     exchange_rate: 90.5,
-    payment_methods: ['Bank transfer'],
-    location: 'Kazan, Russia',
-    note: 'Example listing for the marketplace preview.',
+    created_at: new Date().toISOString(),
   },
   {
     id: 'sample-2',
-    listing_type: 'need',
+    advertiser_name: 'Sample advertiser',
+    whatsapp_number: null,
+    listing_type: 'have',
     currency_available: 'RUB',
-    currency_wanted: 'USD',
+    currency_wanted: 'ECUSD',
     amount: 250,
     exchange_rate: 0.011,
-    payment_methods: ['Discuss with counterparty'],
-    location: 'Moscow, Russia',
-    note: 'Sample request — rate is illustrative, not live.',
+    created_at: new Date().toISOString(),
   },
   {
     id: 'sample-3',
+    advertiser_name: 'Sample advertiser',
+    whatsapp_number: null,
     listing_type: 'have',
     currency_available: 'EUR',
     currency_wanted: 'RUB',
     amount: 500,
     exchange_rate: 98.2,
-    payment_methods: ['Bank transfer'],
-    location: 'Saint Petersburg, Russia',
-    note: null,
+    created_at: new Date().toISOString(),
   },
 ]
 
@@ -62,12 +62,18 @@ export async function loadListings(): Promise<{
     return { listings: demoListings, isDemo: true }
   }
 
+  const { error: expiryError } = await supabase.rpc('expire_stale_listings')
+  if (expiryError) {
+    throw new Error(expiryError.message)
+  }
+
   const { data, error } = await supabase
     .from('marketplace_listings')
     .select(
-      'id, listing_type, currency_available, currency_wanted, amount, exchange_rate, payment_methods, location, note',
+      'id, advertiser_name, whatsapp_number, listing_type, currency_available, currency_wanted, amount, exchange_rate, created_at',
     )
-    .eq('status', 'open')
+    .eq('status', 'available')
+    .not('whatsapp_number', 'is', null)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -75,4 +81,40 @@ export async function loadListings(): Promise<{
   }
 
   return { listings: data, isDemo: false }
+}
+
+export async function reserveListing(listingId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Reservations are unavailable in preview mode.')
+  }
+
+  const { data, error } = await supabase.rpc('reserve_listing', {
+    p_listing_id: listingId,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data) {
+    throw new Error('This listing is no longer available. Refresh to see current listings.')
+  }
+}
+
+export async function completeListing(listingId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Completing reservations is unavailable in preview mode.')
+  }
+
+  const { data, error } = await supabase.rpc('complete_listing', {
+    p_listing_id: listingId,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data) {
+    throw new Error('This reservation is no longer active.')
+  }
 }
