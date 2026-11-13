@@ -109,9 +109,9 @@ export function AuthPanel({ mode, onModeChange, onPreview }: AuthPanelProps) {
     return (
       <section aria-labelledby="sign-in-title" className="auth-panel" id="auth-panel">
         <h2 id="sign-in-title">Sign in to Peer Exchange</h2>
-        <p>Connect your Supabase project to create an account or sign in.</p>
+        <p>We’re unable to connect to account services at the moment.</p>
         <div className="error-message" role="alert">
-          Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> in <code>.env.local</code>, then restart the app.
+          Please try again later.
         </div>
         {import.meta.env.DEV && (
           <button className="secondary-button preview-entry" onClick={onPreview} type="button">

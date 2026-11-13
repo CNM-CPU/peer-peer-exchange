@@ -6,7 +6,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 export const supabaseConfigurationError =
   Boolean(supabaseUrl) !== Boolean(supabaseKey)
-    ? 'Set both VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to connect Supabase.'
+    ? 'Account services are unavailable right now. Please try again later.'
     : null
 
 export const supabase =
