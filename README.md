@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-The app starts at sign-in. Without Supabase environment variables, it shows setup instructions and offers a clearly labeled, read-only sample preview in development only. Preview records have no phone numbers and cannot be contacted or reserved. To connect a Supabase project, copy `.env.example` to `.env.local` and set:
+The app starts at sign-in. Without Supabase environment variables, it shows that account services are unavailable and offers a clearly labeled, read-only sample preview in development only. Preview records have no phone numbers and cannot be contacted or reserved. To connect a Supabase project, copy `.env.example` to `.env.local` and set:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY` (a publishable/anon key only; never use a service-role key in the browser)
@@ -47,7 +47,7 @@ Suspension is enforced by row-level security and the reservation/completion func
 
 1. Import this repository into Vercel; Vercel will detect Vite.
 2. Keep the build command as `npm run build` and the output directory as `dist`.
-3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the Vercel environment if using Supabase.
+3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the Vercel environment, then redeploy.
 4. Add the deployed URL to the Supabase Auth redirect allow-list.
 
 ## Checks
