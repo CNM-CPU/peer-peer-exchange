@@ -22,7 +22,7 @@ Apply migrations in order using the Supabase CLI or SQL Editor:
 2. [`20261113000000_add_whatsapp_reservations.sql`](./supabase/migrations/20261113000000_add_whatsapp_reservations.sql)
 3. [`20261114000000_add_advert_management.sql`](./supabase/migrations/20261114000000_add_advert_management.sql)
 
-Create existing user accounts in Supabase Auth and enable the email provider. The app signs in existing users using a magic link; it does not create accounts. The Supabase auth redirect allow-list must include the app URL.
+Enable the email provider in Supabase Auth and add the app URL to its redirect allow-list. The app supports passwordless email-link sign-up and sign-in; new users must confirm their email before the session is established.
 
 Advertiser contact details are available to authenticated users viewing available listings with a valid WhatsApp number. Existing listings without a number remain hidden until the advertiser's contact details are added. A listing's `exchange_rate` means **want currency per one unit of available currency** (for example, `1 RUB = 0.011 ECUSD`). The selector finds listings in the opposite direction and sorts by ascending `exchange_rate`, so the user pays less of their currency per unit received.
 

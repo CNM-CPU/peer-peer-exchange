@@ -1,6 +1,15 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { ArrowDownUp, CircleAlert, LoaderCircle, ShieldCheck } from 'lucide-react'
+import {
+  ArrowDownUp,
+  Bell,
+  CircleAlert,
+  LoaderCircle,
+  Menu,
+  ShieldCheck,
+  UserRound,
+  X,
+} from 'lucide-react'
 import {
   completeListing,
   loadListings,
@@ -15,6 +24,18 @@ import './App.css'
 
 type Direction = 'rub-ecusd' | 'ecusd-rub' | 'specific'
 type MainView = 'marketplace' | 'create' | 'admin'
+type AuthMode = 'sign-in' | 'sign-up'
+type NotificationAction = 'marketplace' | 'admin' | 'reservation' | 'retry'
+
+type AppNotification = {
+  id: string
+  title: string
+  message: string
+  createdAt: number
+  urgent: boolean
+  read: boolean
+  action?: NotificationAction
+}
 
 const directionOptions: { value: Direction; label: string }[] = [
   { value: 'rub-ecusd', label: 'I have RUB → want EcoCash USD' },
@@ -123,10 +144,36 @@ function App() {
   const [isSuspended, setIsSuspended] = useState(false)
   const [view, setView] = useState<MainView>('marketplace')
   const [refreshVersion, setRefreshVersion] = useState(0)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [isNavigationOpen, setIsNavigationOpen] = useState(false)
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<AuthMode>('sign-in')
   const [email, setEmail] = useState('')
   const [isSendingLink, setIsSendingLink] = useState(false)
   const [signInMessage, setSignInMessage] = useState<string | null>(null)
   const [signInError, setSignInError] = useState<string | null>(null)
+  const appHeaderRef = useRef<HTMLElement>(null)
+
+  function addNotification(
+    title: string,
+    message: string,
+    urgent = false,
+    action?: NotificationAction,
+  ) {
+    setNotifications((current) => [
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        title,
+        message,
+        createdAt: Date.now(),
+        urgent,
+        read: false,
+        action,
+      },
+      ...current,
+    ].slice(0, 10))
+  }
 
   useEffect(() => {
     if (!supabase) return
@@ -162,6 +209,32 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!isNavigationOpen && !isNotificationsOpen && !isAccountOpen) return
+
+    const closePopovers = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsNavigationOpen(false)
+        setIsNotificationsOpen(false)
+        setIsAccountOpen(false)
+      }
+    }
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !appHeaderRef.current?.contains(event.target)) {
+        setIsNavigationOpen(false)
+        setIsNotificationsOpen(false)
+        setIsAccountOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', closePopovers)
+    window.addEventListener('pointerdown', closeOnOutsideClick)
+    return () => {
+      window.removeEventListener('keydown', closePopovers)
+      window.removeEventListener('pointerdown', closeOnOutsideClick)
+    }
+  }, [isAccountOpen, isNavigationOpen, isNotificationsOpen])
 
   useEffect(() => {
     let active = true
@@ -216,7 +289,7 @@ function App() {
     [listings, selectedPair],
   )
 
-  async function handleSignIn(event: FormEvent<HTMLFormElement>) {
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
     setIsSendingLink(true)
@@ -225,12 +298,16 @@ function App() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: false },
+        options: { shouldCreateUser: authMode === 'sign-up' },
       })
       if (error) {
         setSignInError(error.message)
       } else {
-        setSignInMessage('Check your email for a secure sign-in link.')
+        setSignInMessage(
+          authMode === 'sign-up'
+            ? 'Account link sent. Confirm your email to finish signing up.'
+            : 'Check your email for a secure sign-in link.',
+        )
       }
     } catch (cause) {
       setSignInError(cause instanceof Error ? cause.message : 'Could not send the sign-in link.')
@@ -258,9 +335,16 @@ function App() {
       whatsappWindow.location.href = url
       setReservedListingId(listing.id)
       setFeedback(`Listing reserved for ${reservationMinutes} minutes. Continue your conversation on WhatsApp.`)
+      addNotification(
+        'Listing reserved',
+        `It is held for ${reservationMinutes} minutes. Continue on WhatsApp, then confirm completion.`,
+        true,
+        'reservation',
+      )
     } catch (cause) {
       whatsappWindow.close()
       setFeedback(cause instanceof Error ? cause.message : 'Could not reserve this listing.')
+      addNotification('Could not reserve listing', cause instanceof Error ? cause.message : 'Please try again.', true, 'retry')
       if (cause instanceof Error && cause.message.includes('no longer available')) {
         try {
           const result = await loadListings()
@@ -281,8 +365,10 @@ function App() {
       await completeListing(reservedListingId)
       setReservedListingId(null)
       setFeedback('Exchange marked completed. Thanks for keeping the listing board up to date.')
+      addNotification('Exchange completed', 'The listing was recorded as completed.')
     } catch (cause) {
       setFeedback(cause instanceof Error ? cause.message : 'Could not complete this reservation.')
+      addNotification('Could not complete exchange', cause instanceof Error ? cause.message : 'Please try again.', true, 'reservation')
     } finally {
       setIsCompletingReservation(false)
     }
@@ -299,9 +385,58 @@ function App() {
       setPayWith(currencyWanted)
     }
     setFeedback('Your advert is published and available to matching users.')
+    addNotification('Advert published', 'Your advert is now visible to matching users.', false, 'marketplace')
     setRefreshVersion((current) => current + 1)
     setView('marketplace')
   }
+
+  function openView(nextView: MainView) {
+    setView(nextView)
+    setIsNavigationOpen(false)
+    setIsNotificationsOpen(false)
+    setIsAccountOpen(false)
+  }
+
+  function openAuth(mode: AuthMode) {
+    setAuthMode(mode)
+    setIsNavigationOpen(false)
+    setIsAccountOpen(false)
+    document.getElementById('auth-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  function handleNotificationAction(action?: NotificationAction, notificationId?: string) {
+    if (action === 'retry') {
+      setRefreshVersion((current) => current + 1)
+      setView('marketplace')
+    } else if (action === 'reservation' || action === 'marketplace') {
+      setView('marketplace')
+    } else if (action === 'admin' && isAdmin) {
+      setView('admin')
+    }
+    if (notificationId) {
+      setNotifications((current) =>
+        current.map((item) => item.id === notificationId ? { ...item, read: true } : item),
+      )
+    }
+    setIsNotificationsOpen(false)
+  }
+
+  const urgentNotification = notifications.find((item) => item.urgent && !item.read)
+  const unreadCount =
+    notifications.filter((item) => !item.read).length + (loadError ? 1 : 0) + (isSuspended ? 1 : 0)
+  const displayName = session?.user.email ?? 'Account'
+  const accountSummary = session
+    ? displayName
+    : supabase
+      ? 'Sign in to Peer Exchange'
+      : 'Preview account'
+  const avatarLabel = displayName
+    .split('@')[0]
+    .split(/[._-]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('') || 'U'
 
   if (supabaseConfigurationError) {
     return <main className="screen"><div className="message-panel" role="alert">{supabaseConfigurationError}</div></main>
@@ -309,53 +444,182 @@ function App() {
 
   return (
     <main className="screen">
-      <header className="app-header">
-        <a aria-label="Peer Exchange home" className="brand" href="#top">
-          <span className="brand-mark" aria-hidden="true">↔</span>
-          <span>peer<span className="brand-accent">exchange</span></span>
-        </a>
-        {session && (
-          <nav aria-label="Main navigation" className="app-nav">
+      <header className="app-header" ref={appHeaderRef}>
+        <div className="header-start">
+          <div className="popover-anchor">
             <button
-              aria-current={view === 'marketplace' ? 'page' : undefined}
-              className={view === 'marketplace' ? 'app-nav-active' : ''}
-              onClick={() => setView('marketplace')}
+              aria-controls="primary-navigation"
+              aria-expanded={isNavigationOpen}
+              aria-label={isNavigationOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              className="icon-button"
+              onClick={() => {
+                setIsNavigationOpen((open) => !open)
+                setIsNotificationsOpen(false)
+                setIsAccountOpen(false)
+              }}
               type="button"
             >
-              Marketplace
+              {isNavigationOpen ? <X aria-hidden="true" size={20} /> : <Menu aria-hidden="true" size={20} />}
             </button>
-            <button
-              aria-current={view === 'create' ? 'page' : undefined}
-              className={view === 'create' ? 'app-nav-active' : ''}
-              onClick={() => setView('create')}
-              type="button"
-            >
-              Add advert
-            </button>
-            {isAdmin && (
+            {isNavigationOpen && (
+              <nav aria-label="Primary navigation" className="header-popover navigation-popover" id="primary-navigation">
+                <button aria-current={view === 'marketplace' ? 'page' : undefined} onClick={() => openView('marketplace')} type="button">Marketplace</button>
+                {(session || !supabase) && (
+                  <button aria-current={view === 'create' ? 'page' : undefined} onClick={() => openView('create')} type="button">Add advert</button>
+                )}
+                {isAdmin && <button aria-current={view === 'admin' ? 'page' : undefined} onClick={() => openView('admin')} type="button">Admin dashboard</button>}
+                {supabase && !session && (
+                  <>
+                    <button onClick={() => openAuth('sign-in')} type="button">Sign in</button>
+                    <button onClick={() => openAuth('sign-up')} type="button">Create account</button>
+                  </>
+                )}
+              </nav>
+            )}
+          </div>
+          <a aria-label="Peer Exchange home" className="brand" href="#top">
+            <span className="brand-mark" aria-hidden="true">↔</span>
+            <span>peer<span className="brand-accent">exchange</span></span>
+          </a>
+        </div>
+        <div className="header-actions">
+            <div className="popover-anchor">
               <button
-                aria-current={view === 'admin' ? 'page' : undefined}
-                className={view === 'admin' ? 'app-nav-active' : ''}
-                onClick={() => setView('admin')}
+                aria-controls="notifications-panel"
+                aria-expanded={isNotificationsOpen}
+                aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                className="icon-button notification-button"
+                onClick={() => {
+                  setIsNotificationsOpen((open) => !open)
+                  setIsNavigationOpen(false)
+                  setIsAccountOpen(false)
+                  if (!isNotificationsOpen) {
+                    setNotifications((current) => current.map((item) => ({ ...item, read: true })))
+                  }
+                }}
                 type="button"
               >
-                Admin
+                <Bell aria-hidden="true" size={19} />
+                {unreadCount > 0 && <span aria-hidden="true" className="notification-count">{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
-            )}
-          </nav>
-        )}
-        {session && (
+              {isNotificationsOpen && (
+                <section aria-label="Notifications" className="header-popover notifications-popover" id="notifications-panel">
+                  <div className="popover-heading">
+                    <h2>Notifications</h2>
+                    {notifications.length > 0 && (
+                      <button className="clear-notifications" onClick={() => setNotifications([])} type="button">Clear</button>
+                    )}
+                  </div>
+                  {loadError && (
+                    <article className="notification-item notification-item-urgent">
+                      <strong>Marketplace needs attention</strong>
+                      <p>{loadError}</p>
+                      <button onClick={() => handleNotificationAction('retry')} type="button">Try again</button>
+                    </article>
+                  )}
+                  {isSuspended && (
+                    <article className="notification-item notification-item-urgent">
+                      <strong>Account suspended</strong>
+                      <p>Contact an administrator if you believe this is a mistake.</p>
+                    </article>
+                  )}
+                  {notifications.length === 0 && !loadError && !isSuspended ? (
+                    <p className="notifications-empty">You’re all caught up.</p>
+                  ) : (
+                    notifications.map((item) => (
+                      <article className={item.urgent ? 'notification-item notification-item-urgent' : 'notification-item'} key={item.id}>
+                        <strong>{item.title}</strong>
+                        <p>{item.message}</p>
+                        {item.action && (
+                          <button onClick={() => handleNotificationAction(item.action, item.id)} type="button">
+                            {item.action === 'reservation' ? 'View reservation' : item.action === 'admin' ? 'Open admin' : item.action === 'retry' ? 'Try again' : 'View marketplace'}
+                          </button>
+                        )}
+                        <time dateTime={new Date(item.createdAt).toISOString()}>
+                          {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(item.createdAt)}
+                        </time>
+                      </article>
+                    ))
+                  )}
+                </section>
+              )}
+            </div>
+            <div className="popover-anchor">
+              <button
+                aria-controls="account-panel"
+                aria-expanded={isAccountOpen}
+                aria-label={
+                  session
+                    ? `Account: ${displayName}`
+                    : supabase
+                      ? 'Account: signed out'
+                      : 'Account: preview mode'
+                }
+                className="avatar-button"
+                onClick={() => {
+                  setIsAccountOpen((open) => !open)
+                  setIsNavigationOpen(false)
+                  setIsNotificationsOpen(false)
+                }}
+                type="button"
+              >
+                {session ? avatarLabel : <UserRound aria-hidden="true" size={18} />}
+              </button>
+              {isAccountOpen && (
+                <section aria-label="Account" className="header-popover account-popover" id="account-panel">
+                  <div className="account-summary">
+                    {session
+                      ? <span aria-hidden="true" className="avatar avatar-large">{avatarLabel}</span>
+                      : <span aria-hidden="true" className="avatar avatar-large"><UserRound size={22} /></span>}
+                    <span>{accountSummary}</span>
+                    {isAdmin && <small>Administrator</small>}
+                    {!session && <small>{supabase ? 'Sign in to publish and manage adverts.' : 'Browsing sample listings; account actions are unavailable.'}</small>}
+                  </div>
+                  {session ? (
+                    <button className="account-signout" onClick={() => { void supabase?.auth.signOut() }} type="button">
+                      Sign out
+                    </button>
+                  ) : supabase ? (
+                    <button className="account-signout" onClick={() => openAuth('sign-in')} type="button">
+                      Sign in
+                    </button>
+                  ) : null}
+                </section>
+              )}
+            </div>
+        </div>
+      </header>
+      {session && isSuspended ? (
+        <section className="urgent-banner" role="alert">
+          <CircleAlert aria-hidden="true" size={18} />
+          <div><strong>Account suspended</strong><span>Contact an administrator if you believe this is a mistake.</span></div>
+          <button onClick={() => { void supabase?.auth.signOut() }} type="button">Sign out</button>
+        </section>
+      ) : session && loadError ? (
+        <section className="urgent-banner" role="alert">
+          <CircleAlert aria-hidden="true" size={18} />
+          <div><strong>Marketplace needs attention</strong><span>{loadError}</span></div>
+          <button onClick={() => setRefreshVersion((current) => current + 1)} type="button">Retry</button>
+        </section>
+      ) : session && urgentNotification ? (
+        <section className="urgent-banner" role="alert">
+          <CircleAlert aria-hidden="true" size={18} />
+          <div><strong>{urgentNotification.title}</strong><span>{urgentNotification.message}</span></div>
+          <button onClick={() => handleNotificationAction(urgentNotification.action, urgentNotification.id)} type="button">
+            {urgentNotification.action === 'reservation' ? 'Review reservation' : 'Review'}
+          </button>
           <button
-            className="sign-out-button"
-            onClick={() => { void supabase?.auth.signOut() }}
+            aria-label="Dismiss urgent notification"
+            className="banner-dismiss"
+            onClick={() => setNotifications((current) => current.map((item) => item.id === urgentNotification.id ? { ...item, read: true } : item))}
             type="button"
           >
-            Sign out
+            <X aria-hidden="true" size={16} />
           </button>
-        )}
-      </header>
+        </section>
+      ) : null}
 
-      <section aria-labelledby="page-title" className="page-intro" id="top">
+      <section aria-labelledby="page-title" className={session ? 'page-intro' : 'page-intro page-intro-auth'} id="top">
         <p className="eyebrow">Peer Exchange</p>
         <h1 id="page-title">
           {view === 'create' ? 'Share an advert' : view === 'admin' ? 'Admin dashboard' : 'Find an exchange'}
@@ -372,10 +636,40 @@ function App() {
       {!authReady ? (
         <div aria-label="Checking sign-in" className="loading-state"><LoaderCircle className="spinner" size={20} /></div>
       ) : supabase && !session ? (
-        <section aria-labelledby="sign-in-title" className="auth-panel">
-          <h2 id="sign-in-title">Sign in to browse</h2>
-          <p>We’ll email you a secure sign-in link. An existing account is required.</p>
-          <form onSubmit={(event) => { void handleSignIn(event) }}>
+        <section aria-labelledby="sign-in-title" className="auth-panel" id="auth-panel">
+          <div aria-label="Account access" className="auth-tabs" role="group">
+            <button
+              aria-pressed={authMode === 'sign-in'}
+              className={authMode === 'sign-in' ? 'auth-tab auth-tab-active' : 'auth-tab'}
+              onClick={() => {
+                setAuthMode('sign-in')
+                setSignInError(null)
+                setSignInMessage(null)
+              }}
+              type="button"
+            >
+              Sign in
+            </button>
+            <button
+              aria-pressed={authMode === 'sign-up'}
+              className={authMode === 'sign-up' ? 'auth-tab auth-tab-active' : 'auth-tab'}
+              onClick={() => {
+                setAuthMode('sign-up')
+                setSignInError(null)
+                setSignInMessage(null)
+              }}
+              type="button"
+            >
+              Create account
+            </button>
+          </div>
+          <h2 id="sign-in-title">{authMode === 'sign-up' ? 'Join Peer Exchange' : 'Welcome back'}</h2>
+          <p>
+            {authMode === 'sign-up'
+              ? 'Create an account with your email. We’ll send you a secure confirmation link.'
+              : 'Enter your email and we’ll send you a secure sign-in link.'}
+          </p>
+          <form onSubmit={(event) => { void handleAuthSubmit(event) }}>
             <label htmlFor="email">Email address</label>
             <input
               autoComplete="email"
@@ -386,7 +680,11 @@ function App() {
               value={email}
             />
             <button className="contact-button" disabled={isSendingLink} type="submit">
-              {isSendingLink ? 'Sending link…' : 'Email me a sign-in link'}
+              {isSendingLink
+                ? 'Sending link…'
+                : authMode === 'sign-up'
+                  ? 'Create account'
+                  : 'Email me a sign-in link'}
             </button>
           </form>
           {signInMessage && <p className="success-message" role="status">{signInMessage}</p>}
