@@ -71,6 +71,8 @@ export type Database = {
           role: 'user' | 'admin'
           created_at: string
           suspended_at: string | null
+          display_name: string | null
+          avatar_path: string | null
         }
         Insert: {
           id: string
@@ -78,11 +80,15 @@ export type Database = {
           role?: 'user' | 'admin'
           created_at?: string
           suspended_at?: string | null
+          display_name?: string | null
+          avatar_path?: string | null
         }
         Update: Partial<{
           email: string | null
           role: 'user' | 'admin'
           suspended_at: string | null
+          display_name: string | null
+          avatar_path: string | null
         }>
         Relationships: []
       },

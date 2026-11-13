@@ -11,18 +11,19 @@ npm install
 npm run dev
 ```
 
-Without Supabase environment variables, the app displays clearly labeled sample listings. Those records have no phone numbers and cannot be contacted or reserved. To connect a Supabase project, copy `.env.example` to `.env.local` and set:
+The app starts at sign-in. Without Supabase environment variables, it shows setup instructions and offers a clearly labeled, read-only sample preview in development only. Preview records have no phone numbers and cannot be contacted or reserved. To connect a Supabase project, copy `.env.example` to `.env.local` and set:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY` (a publishable/anon key only; never use a service-role key in the browser)
 
-Apply migrations in order using the Supabase CLI or SQL Editor:
+Apply any migrations you have not already run, in order, using the Supabase CLI or SQL Editor. Do not rerun migrations that have already been applied:
 
 1. [`20261112000000_create_marketplace_listings.sql`](./supabase/migrations/20261112000000_create_marketplace_listings.sql)
 2. [`20261113000000_add_whatsapp_reservations.sql`](./supabase/migrations/20261113000000_add_whatsapp_reservations.sql)
 3. [`20261114000000_add_advert_management.sql`](./supabase/migrations/20261114000000_add_advert_management.sql)
+4. [`20261115000000_add_profile_settings_and_owned_adverts.sql`](./supabase/migrations/20261115000000_add_profile_settings_and_owned_adverts.sql)
 
-Enable the email provider in Supabase Auth and add the app URL to its redirect allow-list. The app supports passwordless email-link sign-up and sign-in; new users must confirm their email before the session is established.
+Enable the email provider in Supabase Auth and add the app URL to its redirect allow-list. The app supports password and email-link sign-up/sign-in, password recovery, and email-change confirmation. New users must confirm their email before the session is established. The profile migration adds private avatar storage and owner-only advert editing/removal for available adverts.
 
 Advertiser contact details are available to authenticated users viewing available listings with a valid WhatsApp number. Existing listings without a number remain hidden until the advertiser's contact details are added. A listing's `exchange_rate` means **want currency per one unit of available currency** (for example, `1 RUB = 0.011 ECUSD`). The selector finds listings in the opposite direction and sorts by ascending `exchange_rate`, so the user pays less of their currency per unit received.
 
@@ -31,6 +32,8 @@ Pressing **Contact on WhatsApp** atomically reserves the listing for 20 minutes 
 Listings should store international WhatsApp numbers in E.164 format, such as `+263771234567`. The `ECUSD` currency code is used for EcoCash USD, distinct from cash USD.
 
 Signed-in users can publish adverts from **Add advert**. The advertiser's rate is want-currency per one available-currency unit. Their advert appears to other users searching the opposite direction; users do not see their own advert as a contactable listing.
+
+The hamburger menu provides **Marketplace**, **Add advert**, and **My adverts** for signed-in users, plus **Admin dashboard** for admins. The account menu provides account settings, password reset, and sign-out. Account settings support display name, email confirmation, password updates, and a private profile picture.
 
 ## Admin and analytics
 

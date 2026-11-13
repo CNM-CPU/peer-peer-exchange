@@ -58,6 +58,51 @@
   background: #f2f4f7;
 }
 
+.auth-methods {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.auth-method {
+  min-height: 34px;
+  border: 1px solid #e4e7ec;
+  border-radius: 7px;
+  color: #667085;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.auth-method-active {
+  border-color: #b6c8e8;
+  color: #244b8d;
+  background: #f5f8ff;
+}
+
+.auth-footer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 13px;
+}
+
+.text-button {
+  padding: 5px;
+  border: 0;
+  color: var(--blue);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.preview-entry {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .notification-count {
   position: absolute;
   top: 1px;
@@ -94,6 +139,13 @@
   cursor: pointer;
   font: inherit;
   font-size: 11px;
+}
+
+.avatar-button img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .avatar-button:hover,
@@ -249,6 +301,13 @@
   font-size: 14px;
 }
 
+img.avatar-large {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .account-summary small {
   color: #667085;
   font-size: 10px;
@@ -269,6 +328,10 @@
 
 .account-signout:hover {
   background: #f8f9fb;
+}
+
+.account-popover .account-signout + .account-signout {
+  margin-top: 6px;
 }
 
 .urgent-banner {
@@ -726,7 +789,9 @@
 }
 
 .form-panel,
-.admin-panel {
+.admin-panel,
+.profile-panel,
+.my-listings-panel {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -880,6 +945,149 @@
 .admin-panel {
   display: grid;
   gap: 23px;
+}
+
+.profile-panel,
+.my-listings-panel {
+  display: grid;
+  max-width: 760px;
+  gap: 20px;
+}
+
+.profile-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #edf0f4;
+}
+
+.profile-section h3 {
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+}
+
+.profile-avatar-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar-preview img,
+.profile-avatar-preview > .avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-avatar-preview > div {
+  min-width: 0;
+}
+
+.profile-avatar-preview p {
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.profile-actions,
+.listing-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-button input:disabled {
+  cursor: wait;
+}
+
+.account-form {
+  display: grid;
+  gap: 11px;
+}
+
+.account-form label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.account-form input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #dfe4eb;
+  border-radius: 8px;
+  color: #344054;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.account-form .primary-button,
+.account-form .secondary-button {
+  justify-self: start;
+}
+
+.owned-listings {
+  display: grid;
+  gap: 12px;
+}
+
+.owned-listing-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.listing-status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #526174;
+  background: #f2f4f7;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.listing-status-available {
+  color: #3d7050;
+  background: #eff8f1;
+}
+
+.listing-edit-form {
+  padding-top: 14px;
+  border-top: 1px solid #edf0f4;
+}
+
+.listing-edit-actions > span {
+  color: #475467;
+  font-size: 11px;
 }
 
 .admin-heading {
@@ -1115,7 +1323,9 @@
   .direction-panel,
   .auth-panel,
   .form-panel,
-  .admin-panel {
+  .admin-panel,
+  .profile-panel,
+  .my-listings-panel {
     padding: 21px;
   }
 

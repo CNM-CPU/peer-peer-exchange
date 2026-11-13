@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import {
   ArrowDownUp,
@@ -10,6 +10,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import { AuthPanel, type AuthMode } from './components/AuthPanel'
 import {
   completeListing,
   loadListings,
@@ -17,15 +18,17 @@ import {
   type MarketplaceListing,
 } from './lib/listings'
 import { currencyName, foreignCurrencies } from './lib/currencies'
+import { loadAccountProfile, type AccountProfile } from './lib/profile'
 import { supabase, supabaseConfigurationError } from './lib/supabase'
 import { ListingForm } from './components/ListingForm'
 import { AdminPanel } from './components/AdminPanel'
+import { MyListingsPanel } from './components/MyListingsPanel'
+import { ProfileSettings } from './components/ProfileSettings'
 import './App.css'
 
 type Direction = 'rub-ecusd' | 'ecusd-rub' | 'specific'
-type MainView = 'marketplace' | 'create' | 'admin'
-type AuthMode = 'sign-in' | 'sign-up'
-type NotificationAction = 'marketplace' | 'admin' | 'reservation' | 'retry'
+type MainView = 'marketplace' | 'create' | 'my-adverts' | 'profile' | 'admin'
+type NotificationAction = 'marketplace' | 'my-adverts' | 'profile' | 'admin' | 'reservation' | 'retry'
 
 type AppNotification = {
   id: string
@@ -141,6 +144,14 @@ function App() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabase)
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [profile, setProfile] = useState<AccountProfile>({
+    displayName: null,
+    avatarPath: null,
+    avatarUrl: null,
+  })
+  const [profileSyncRevision, setProfileSyncRevision] = useState(0)
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null)
   const [isSuspended, setIsSuspended] = useState(false)
   const [view, setView] = useState<MainView>('marketplace')
   const [refreshVersion, setRefreshVersion] = useState(0)
@@ -149,10 +160,6 @@ function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isAccountOpen, setIsAccountOpen] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>('sign-in')
-  const [email, setEmail] = useState('')
-  const [isSendingLink, setIsSendingLink] = useState(false)
-  const [signInMessage, setSignInMessage] = useState<string | null>(null)
-  const [signInError, setSignInError] = useState<string | null>(null)
   const appHeaderRef = useRef<HTMLElement>(null)
 
   function addNotification(
@@ -179,14 +186,22 @@ function App() {
     if (!supabase) return
 
     let active = true
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (active) {
         setSession(nextSession)
         setAuthReady(true)
+        if (event === 'PASSWORD_RECOVERY') {
+          setAuthMode('update-password')
+          setView('marketplace')
+        }
         if (!nextSession) {
           setReservedListingId(null)
           setIsSuspended(false)
           setView('marketplace')
+          setAuthMode('sign-in')
+          setIsPreviewMode(false)
+          setProfile({ displayName: null, avatarPath: null, avatarUrl: null })
+          setProfileLoadError(null)
         }
       }
     })
@@ -194,11 +209,17 @@ function App() {
     supabase.auth.getSession()
       .then(({ data, error }) => {
         if (!active) return
-        if (error) setSignInError(error.message)
+        if (error) addNotification('Could not restore your session', error.message, true)
         setSession(data.session)
       })
       .catch((cause: unknown) => {
-        if (active) setSignInError(cause instanceof Error ? cause.message : 'Could not check sign-in status.')
+        if (active) {
+          addNotification(
+            'Could not restore your session',
+            cause instanceof Error ? cause.message : 'Could not check sign-in status.',
+            true,
+          )
+        }
       })
       .finally(() => {
         if (active) setAuthReady(true)
@@ -209,6 +230,38 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  const profileUserId = session?.user.id
+  const profileEmail = session?.user.email
+  const metadataDisplayName = session?.user.user_metadata.display_name
+
+  useEffect(() => {
+    if (!profileUserId) return
+
+    let active = true
+    void loadAccountProfile(profileUserId)
+      .then((loadedProfile) => {
+        if (!active) return
+        setProfile({
+          ...loadedProfile,
+          displayName: loadedProfile.displayName ??
+            (typeof metadataDisplayName === 'string' ? metadataDisplayName : null),
+        })
+        setProfileLoadError(null)
+        setProfileSyncRevision((current) => current + 1)
+      })
+      .catch((cause: unknown) => {
+        if (!active) return
+        setProfile({
+          displayName: typeof metadataDisplayName === 'string' ? metadataDisplayName : null,
+          avatarPath: null,
+          avatarUrl: null,
+        })
+        setProfileLoadError(cause instanceof Error ? cause.message : 'Could not load your profile.')
+        setProfileSyncRevision((current) => current + 1)
+      })
+    return () => { active = false }
+  }, [profileUserId, profileEmail, metadataDisplayName])
 
   useEffect(() => {
     if (!isNavigationOpen && !isNotificationsOpen && !isAccountOpen) return
@@ -255,7 +308,7 @@ function App() {
       }
     }
 
-    if (supabase && !session) {
+    if ((supabase && !session) || (!supabase && !isPreviewMode)) {
       return () => { active = false }
     }
     if (view !== 'marketplace') return () => { active = false }
@@ -268,7 +321,7 @@ function App() {
       active = false
       window.clearInterval(intervalId)
     }
-  }, [session, refreshVersion, view])
+  }, [session, refreshVersion, view, isPreviewMode])
 
   const isAdmin = session?.user.app_metadata.role === 'admin'
 
@@ -288,33 +341,6 @@ function App() {
         .sort((a, b) => a.exchange_rate - b.exchange_rate),
     [listings, selectedPair],
   )
-
-  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!supabase) return
-    setIsSendingLink(true)
-    setSignInError(null)
-    setSignInMessage(null)
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { shouldCreateUser: authMode === 'sign-up' },
-      })
-      if (error) {
-        setSignInError(error.message)
-      } else {
-        setSignInMessage(
-          authMode === 'sign-up'
-            ? 'Account link sent. Confirm your email to finish signing up.'
-            : 'Check your email for a secure sign-in link.',
-        )
-      }
-    } catch (cause) {
-      setSignInError(cause instanceof Error ? cause.message : 'Could not send the sign-in link.')
-    } finally {
-      setIsSendingLink(false)
-    }
-  }
 
   async function handleContact(listing: MarketplaceListing) {
     const url = getWhatsAppUrl(listing)
@@ -374,6 +400,45 @@ function App() {
     }
   }
 
+  async function handleSignOut() {
+    if (!supabase) return
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        addNotification('Could not sign out', error.message, true)
+      }
+    } catch (cause) {
+      addNotification(
+        'Could not sign out',
+        cause instanceof Error ? cause.message : 'Please try again.',
+        true,
+      )
+    }
+  }
+
+  async function handleAccountPasswordReset() {
+    if (!supabase || !session?.user.email) {
+      addNotification('Password reset unavailable', 'A signed-in email account is required.', true)
+      setIsAccountOpen(false)
+      return
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(session.user.email, {
+        redirectTo: window.location.origin,
+      })
+      if (error) throw new Error(error.message)
+      addNotification('Password reset email sent', 'Check your email to choose a new password.')
+    } catch (cause) {
+      addNotification(
+        'Could not send password reset email',
+        cause instanceof Error ? cause.message : 'Please try again.',
+        true,
+      )
+    } finally {
+      setIsAccountOpen(false)
+    }
+  }
+
   function handleListingCreated(currencyAvailable: string, currencyWanted: string) {
     if (currencyAvailable === 'RUB' && currencyWanted === 'ECUSD') {
       setDirection('ecusd-rub')
@@ -404,12 +469,26 @@ function App() {
     document.getElementById('auth-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
+  function handleAuthModeChange(mode: AuthMode) {
+    setAuthMode(mode)
+    if (mode === 'sign-in') setView('marketplace')
+  }
+
+  function handleProfileUpdated(nextProfile: AccountProfile) {
+    setProfile(nextProfile)
+    setProfileLoadError(null)
+  }
+
   function handleNotificationAction(action?: NotificationAction, notificationId?: string) {
     if (action === 'retry') {
       setRefreshVersion((current) => current + 1)
       setView('marketplace')
     } else if (action === 'reservation' || action === 'marketplace') {
       setView('marketplace')
+    } else if (action === 'my-adverts') {
+      setView('my-adverts')
+    } else if (action === 'profile') {
+      setView('profile')
     } else if (action === 'admin' && isAdmin) {
       setView('admin')
     }
@@ -424,12 +503,9 @@ function App() {
   const urgentNotification = notifications.find((item) => item.urgent && !item.read)
   const unreadCount =
     notifications.filter((item) => !item.read).length + (loadError ? 1 : 0) + (isSuspended ? 1 : 0)
-  const displayName = session?.user.email ?? 'Account'
-  const accountSummary = session
-    ? displayName
-    : supabase
-      ? 'Sign in to Peer Exchange'
-      : 'Preview account'
+  const displayName = profile.displayName ??
+    (typeof metadataDisplayName === 'string' ? metadataDisplayName : session?.user.email ?? 'Account')
+  const accountSummary = session ? displayName : supabase ? 'Sign in to Peer Exchange' : 'Preview account'
   const avatarLabel = displayName
     .split('@')[0]
     .split(/[._-]/)
@@ -463,12 +539,17 @@ function App() {
             </button>
             {isNavigationOpen && (
               <nav aria-label="Primary navigation" className="header-popover navigation-popover" id="primary-navigation">
-                <button aria-current={view === 'marketplace' ? 'page' : undefined} onClick={() => openView('marketplace')} type="button">Marketplace</button>
-                {(session || !supabase) && (
+                {(session || isPreviewMode) && (
+                  <button aria-current={view === 'marketplace' ? 'page' : undefined} onClick={() => openView('marketplace')} type="button">Marketplace</button>
+                )}
+                {session && (
                   <button aria-current={view === 'create' ? 'page' : undefined} onClick={() => openView('create')} type="button">Add advert</button>
                 )}
+                {session && (
+                  <button aria-current={view === 'my-adverts' ? 'page' : undefined} onClick={() => openView('my-adverts')} type="button">My adverts</button>
+                )}
                 {isAdmin && <button aria-current={view === 'admin' ? 'page' : undefined} onClick={() => openView('admin')} type="button">Admin dashboard</button>}
-                {supabase && !session && (
+                {!session && !isPreviewMode && (
                   <>
                     <button onClick={() => openAuth('sign-in')} type="button">Sign in</button>
                     <button onClick={() => openAuth('sign-up')} type="button">Create account</button>
@@ -563,26 +644,35 @@ function App() {
                 }}
                 type="button"
               >
-                {session ? avatarLabel : <UserRound aria-hidden="true" size={18} />}
+                {session
+                  ? profile.avatarUrl
+                    ? <img alt="" src={profile.avatarUrl} />
+                    : avatarLabel
+                  : <UserRound aria-hidden="true" size={18} />}
               </button>
               {isAccountOpen && (
                 <section aria-label="Account" className="header-popover account-popover" id="account-panel">
                   <div className="account-summary">
                     {session
-                      ? <span aria-hidden="true" className="avatar avatar-large">{avatarLabel}</span>
+                      ? profile.avatarUrl
+                        ? <img alt="" className="avatar avatar-large" src={profile.avatarUrl} />
+                        : <span aria-hidden="true" className="avatar avatar-large">{avatarLabel}</span>
                       : <span aria-hidden="true" className="avatar avatar-large"><UserRound size={22} /></span>}
                     <span>{accountSummary}</span>
                     {isAdmin && <small>Administrator</small>}
-                    {!session && <small>{supabase ? 'Sign in to publish and manage adverts.' : 'Browsing sample listings; account actions are unavailable.'}</small>}
+                    {!session && <small>{isPreviewMode ? 'Browsing sample listings; account actions are unavailable.' : 'Sign in to publish and manage adverts.'}</small>}
                   </div>
                   {session ? (
-                    <button className="account-signout" onClick={() => { void supabase?.auth.signOut() }} type="button">
-                      Sign out
-                    </button>
-                  ) : supabase ? (
-                    <button className="account-signout" onClick={() => openAuth('sign-in')} type="button">
-                      Sign in
-                    </button>
+                    <>
+                      <button className="account-signout" onClick={() => openView('profile')} type="button">Account settings</button>
+                      <button className="account-signout account-reset" onClick={() => { void handleAccountPasswordReset() }} type="button">Reset password</button>
+                      <button className="account-signout" onClick={() => { void handleSignOut() }} type="button">Sign out</button>
+                    </>
+                  ) : !isPreviewMode ? (
+                    <>
+                      <button className="account-signout" onClick={() => openAuth('sign-in')} type="button">Sign in</button>
+                      <button className="account-signout" onClick={() => openAuth('sign-up')} type="button">Create account</button>
+                    </>
                   ) : null}
                 </section>
               )}
@@ -593,7 +683,7 @@ function App() {
         <section className="urgent-banner" role="alert">
           <CircleAlert aria-hidden="true" size={18} />
           <div><strong>Account suspended</strong><span>Contact an administrator if you believe this is a mistake.</span></div>
-          <button onClick={() => { void supabase?.auth.signOut() }} type="button">Sign out</button>
+          <button onClick={() => { void handleSignOut() }} type="button">Sign out</button>
         </section>
       ) : session && loadError ? (
         <section className="urgent-banner" role="alert">
@@ -619,14 +709,34 @@ function App() {
         </section>
       ) : null}
 
-      <section aria-labelledby="page-title" className={session ? 'page-intro' : 'page-intro page-intro-auth'} id="top">
+      <section
+        aria-labelledby="page-title"
+        className={session || isPreviewMode ? 'page-intro' : 'page-intro page-intro-auth'}
+        id="top"
+      >
         <p className="eyebrow">Peer Exchange</p>
         <h1 id="page-title">
-          {view === 'create' ? 'Share an advert' : view === 'admin' ? 'Admin dashboard' : 'Find an exchange'}
+          {view === 'create'
+            ? 'Share an advert'
+            : view === 'my-adverts'
+              ? 'My adverts'
+              : view === 'profile'
+                ? 'Account settings'
+                : view === 'admin'
+                  ? 'Admin dashboard'
+                  : session || isPreviewMode
+                    ? 'Find an exchange'
+                    : 'Welcome to Peer Exchange'}
         </h1>
         <p>
-          {view === 'create'
+          {!session && !isPreviewMode
+            ? 'Sign in to access the currency marketplace.'
+            : view === 'create'
             ? 'Publish your exchange terms and let interested people contact you on WhatsApp.'
+            : view === 'my-adverts'
+              ? 'View and manage your published exchange listings.'
+              : view === 'profile'
+                ? 'Manage your personal information, profile picture, and password.'
             : view === 'admin'
               ? 'Monitor confirmed exchanges and manage account access.'
               : 'Choose what you have. We’ll show matching listings, best rate first.'}
@@ -635,65 +745,31 @@ function App() {
 
       {!authReady ? (
         <div aria-label="Checking sign-in" className="loading-state"><LoaderCircle className="spinner" size={20} /></div>
-      ) : supabase && !session ? (
-        <section aria-labelledby="sign-in-title" className="auth-panel" id="auth-panel">
-          <div aria-label="Account access" className="auth-tabs" role="group">
-            <button
-              aria-pressed={authMode === 'sign-in'}
-              className={authMode === 'sign-in' ? 'auth-tab auth-tab-active' : 'auth-tab'}
-              onClick={() => {
-                setAuthMode('sign-in')
-                setSignInError(null)
-                setSignInMessage(null)
-              }}
-              type="button"
-            >
-              Sign in
-            </button>
-            <button
-              aria-pressed={authMode === 'sign-up'}
-              className={authMode === 'sign-up' ? 'auth-tab auth-tab-active' : 'auth-tab'}
-              onClick={() => {
-                setAuthMode('sign-up')
-                setSignInError(null)
-                setSignInMessage(null)
-              }}
-              type="button"
-            >
-              Create account
-            </button>
-          </div>
-          <h2 id="sign-in-title">{authMode === 'sign-up' ? 'Join Peer Exchange' : 'Welcome back'}</h2>
-          <p>
-            {authMode === 'sign-up'
-              ? 'Create an account with your email. We’ll send you a secure confirmation link.'
-              : 'Enter your email and we’ll send you a secure sign-in link.'}
-          </p>
-          <form onSubmit={(event) => { void handleAuthSubmit(event) }}>
-            <label htmlFor="email">Email address</label>
-            <input
-              autoComplete="email"
-              id="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-            <button className="contact-button" disabled={isSendingLink} type="submit">
-              {isSendingLink
-                ? 'Sending link…'
-                : authMode === 'sign-up'
-                  ? 'Create account'
-                  : 'Email me a sign-in link'}
-            </button>
-          </form>
-          {signInMessage && <p className="success-message" role="status">{signInMessage}</p>}
-          {signInError && <p className="error-message" role="alert">{signInError}</p>}
-        </section>
+      ) : authMode === 'update-password' && session ? (
+        <AuthPanel mode={authMode} onModeChange={handleAuthModeChange} onPreview={() => setIsPreviewMode(true)} />
+      ) : !session && !isPreviewMode ? (
+        <AuthPanel
+          mode={authMode}
+          onModeChange={handleAuthModeChange}
+          onPreview={() => { setIsPreviewMode(true); setView('marketplace') }}
+        />
       ) : isSuspended ? (
         <div className="error-message account-suspended" role="alert">
           Your account is suspended. Contact an administrator if you believe this is a mistake.
         </div>
+      ) : view === 'profile' && session ? (
+        <>
+          {profileLoadError && <p className="error-message" role="alert">{profileLoadError}</p>}
+          <ProfileSettings
+            key={`${session.user.id}-${session.user.email}-${profileSyncRevision}`}
+            onBack={() => openView('marketplace')}
+            onProfileUpdated={handleProfileUpdated}
+            profile={profile}
+            session={session}
+          />
+        </>
+      ) : view === 'my-adverts' && session ? (
+        <MyListingsPanel />
       ) : view === 'create' ? (
         <ListingForm onListingCreated={handleListingCreated} />
       ) : view === 'admin' && isAdmin ? (

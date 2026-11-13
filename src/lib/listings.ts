@@ -1,5 +1,5 @@
 import { supabase, supabaseConfigurationError } from './supabase'
-import type { MarketplaceListingRow } from '../types/database'
+import type { ListingStatus, MarketplaceListingRow } from '../types/database'
 
 export type MarketplaceListing = Pick<
   MarketplaceListingRow,
@@ -14,6 +14,17 @@ export type MarketplaceListing = Pick<
   | 'exchange_rate'
   | 'created_at'
 >
+
+export type OwnedListing = MarketplaceListing & { status: ListingStatus }
+
+export type ListingUpdateInput = {
+  advertiserName: string
+  whatsappNumber: string
+  currencyAvailable: string
+  currencyWanted: string
+  amount: number
+  exchangeRate: number
+}
 
 const demoListings: MarketplaceListing[] = [
   {
@@ -145,6 +156,72 @@ export async function createListing(input: {
   if (error) {
     throw new Error(error.message)
   }
+}
+
+export async function loadOwnListings(): Promise<OwnedListing[]> {
+  if (!supabase) {
+    throw new Error('Your adverts require a connected Supabase project.')
+  }
+  const { data: userResult, error: userError } = await supabase.auth.getUser()
+  if (userError) throw new Error(userError.message)
+  if (!userResult.user) throw new Error('Sign-in is required to view your adverts.')
+
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .select(
+      'id, owner_id, advertiser_name, whatsapp_number, listing_type, currency_available, currency_wanted, amount, exchange_rate, created_at, status',
+    )
+    .eq('owner_id', userResult.user.id)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function updateOwnListing(id: string, input: ListingUpdateInput): Promise<void> {
+  if (!supabase) {
+    throw new Error('Editing adverts requires a connected Supabase project.')
+  }
+  const { data: userResult, error: userError } = await supabase.auth.getUser()
+  if (userError) throw new Error(userError.message)
+  if (!userResult.user) throw new Error('Sign-in is required to edit an advert.')
+
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .update({
+      advertiser_name: input.advertiserName,
+      whatsapp_number: input.whatsappNumber,
+      currency_available: input.currencyAvailable,
+      currency_wanted: input.currencyWanted,
+      amount: input.amount,
+      exchange_rate: input.exchangeRate,
+    })
+    .eq('id', id)
+    .eq('owner_id', userResult.user.id)
+    .eq('status', 'available')
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('This advert is no longer available to edit.')
+}
+
+export async function removeOwnListing(id: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Removing adverts requires a connected Supabase project.')
+  }
+  const { data: userResult, error: userError } = await supabase.auth.getUser()
+  if (userError) throw new Error(userError.message)
+  if (!userResult.user) throw new Error('Sign-in is required to remove an advert.')
+
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .delete()
+    .eq('id', id)
+    .eq('owner_id', userResult.user.id)
+    .eq('status', 'available')
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('This advert is no longer available to remove.')
 }
 
 export async function reserveListing(listingId: string): Promise<void> {
