@@ -6,7 +6,7 @@ import {
   type ListingUpdateInput,
   type OwnedListing,
 } from '../lib/listings'
-import { currencyName, supportedCurrencies } from '../lib/currencies'
+import { currencyName, formatExchangeRate, supportedCurrencies } from '../lib/currencies'
 
 type ListingDraft = {
   advertiserName: string
@@ -34,12 +34,6 @@ function createDraft(listing: OwnedListing): ListingDraft {
     amount: String(listing.amount),
     exchangeRate: String(listing.exchange_rate),
   }
-}
-
-function formatRate(listing: OwnedListing) {
-  return `1 ${currencyName(listing.currency_available)} = ${new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 6,
-  }).format(listing.exchange_rate)} ${currencyName(listing.currency_wanted)}`
 }
 
 export function MyListingsPanel() {
@@ -169,12 +163,18 @@ export function MyListingsPanel() {
               onChange={(event) => {
                 const currencyAvailable = event.target.value
                 const wantedCurrencies = wantedCurrenciesFor(currencyAvailable)
+                const currencyWanted = wantedCurrencies.includes(draft.currencyWanted)
+                  ? draft.currencyWanted
+                  : wantedCurrencies[0]
+                const availableCurrencyChanged = currencyAvailable !== draft.currencyAvailable
                 setDraft({
                   ...draft,
                   currencyAvailable,
-                  currencyWanted: wantedCurrencies.includes(draft.currencyWanted)
-                    ? draft.currencyWanted
-                    : wantedCurrencies[0],
+                  currencyWanted,
+                  amount: availableCurrencyChanged ? '' : draft.amount,
+                  exchangeRate: availableCurrencyChanged || currencyWanted !== draft.currencyWanted
+                    ? ''
+                    : draft.exchangeRate,
                 })
               }}
               value={draft.currencyAvailable}
@@ -185,7 +185,14 @@ export function MyListingsPanel() {
           <label>
             I want
             <select
-              onChange={(event) => setDraft({ ...draft, currencyWanted: event.target.value })}
+              onChange={(event) => {
+                const currencyWanted = event.target.value
+                setDraft({
+                  ...draft,
+                  currencyWanted,
+                  exchangeRate: currencyWanted !== draft.currencyWanted ? '' : draft.exchangeRate,
+                })
+              }}
               value={draft.currencyWanted}
             >
               {wantedCurrencies.map((code) => <option key={code} value={code}>{currencyName(code)}</option>)}
@@ -205,7 +212,7 @@ export function MyListingsPanel() {
             />
           </label>
           <label>
-            Rate
+            Rate ({currencyName(draft.currencyAvailable)} per 1 {currencyName(draft.currencyWanted)})
             <input
               min="0.00000001"
               onChange={(event) => setDraft({ ...draft, exchangeRate: event.target.value })}
@@ -217,7 +224,7 @@ export function MyListingsPanel() {
           </label>
         </div>
         <p className="field-help">
-          Rate means {currencyName(draft.currencyWanted)} per 1 {currencyName(draft.currencyAvailable)}.
+          Enter how many {currencyName(draft.currencyAvailable)} you offer for each 1 {currencyName(draft.currencyWanted)}.
         </p>
         <div className="listing-edit-actions">
           <button className="primary-button" disabled={savingId === listing.id} type="submit">
@@ -270,7 +277,9 @@ export function MyListingsPanel() {
                     {listing.status}
                   </span>
                 </div>
-                <p className="listing-rate">{formatRate(listing)}</p>
+                <p className="listing-rate">
+                  {formatExchangeRate(listing.exchange_rate, listing.currency_available, listing.currency_wanted)}
+                </p>
                 <p className="listing-amount">
                   Available: {new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(listing.amount)}{' '}
                   {currencyName(listing.currency_available)}

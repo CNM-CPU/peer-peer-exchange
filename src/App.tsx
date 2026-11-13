@@ -17,7 +17,7 @@ import {
   reserveListing,
   type MarketplaceListing,
 } from './lib/listings'
-import { currencyName, foreignCurrencies } from './lib/currencies'
+import { currencyName, formatExchangeRate, foreignCurrencies } from './lib/currencies'
 import { loadAccountProfile, type AccountProfile } from './lib/profile'
 import { supabase, supabaseConfigurationError } from './lib/supabase'
 import { ListingForm } from './components/ListingForm'
@@ -51,10 +51,6 @@ const refreshIntervalMs = 15_000
 
 function formatAmount(amount: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount)
-}
-
-function formatRate(rate: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 }).format(rate)
 }
 
 function formatWhatsAppNumber(listing: MarketplaceListing) {
@@ -100,8 +96,7 @@ function ListingCard({
       <div className="listing-heading">
         <h3>{listing.advertiser_name}</h3>
         <span className="listing-rate">
-          1 {currencyName(listing.currency_available)} = {formatRate(listing.exchange_rate)}{' '}
-          {currencyName(listing.currency_wanted)}
+          {formatExchangeRate(listing.exchange_rate, listing.currency_available, listing.currency_wanted)}
         </span>
       </div>
       <p className="listing-pair">
@@ -338,7 +333,10 @@ function App() {
           listing.currency_available === selectedPair.want &&
           listing.currency_wanted === selectedPair.have,
         )
-        .sort((a, b) => a.exchange_rate - b.exchange_rate),
+        .sort((a, b) =>
+          b.exchange_rate - a.exchange_rate ||
+          b.created_at.localeCompare(a.created_at),
+        ),
     [listings, selectedPair],
   )
 
@@ -503,8 +501,9 @@ function App() {
   const urgentNotification = notifications.find((item) => item.urgent && !item.read)
   const unreadCount =
     notifications.filter((item) => !item.read).length + (loadError ? 1 : 0) + (isSuspended ? 1 : 0)
-  const displayName = profile.displayName ??
-    (typeof metadataDisplayName === 'string' ? metadataDisplayName : session?.user.email ?? 'Account')
+  const profileDisplayName = profile.displayName ??
+    (typeof metadataDisplayName === 'string' ? metadataDisplayName : '')
+  const displayName = profileDisplayName || session?.user.email || 'Account'
   const accountSummary = session ? displayName : supabase ? 'Sign in to Peer Exchange' : 'Preview account'
   const avatarLabel = displayName
     .split('@')[0]
@@ -771,7 +770,7 @@ function App() {
       ) : view === 'my-adverts' && session ? (
         <MyListingsPanel />
       ) : view === 'create' ? (
-        <ListingForm onListingCreated={handleListingCreated} />
+        <ListingForm displayName={profileDisplayName} onListingCreated={handleListingCreated} />
       ) : view === 'admin' && isAdmin ? (
         <AdminPanel />
       ) : view === 'admin' ? (
@@ -823,7 +822,7 @@ function App() {
                 <h2 id="listings-title">Available listings</h2>
                 <p>
                   {currencyName(selectedPair.have)} → {currencyName(selectedPair.want)}
-                  <span className="sort-note"> · lowest cost first</span>
+                  <span className="sort-note"> · best rate first</span>
                 </p>
               </div>
               {isDemo && <span className="preview-label">Preview data</span>}

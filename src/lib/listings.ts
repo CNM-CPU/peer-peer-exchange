@@ -36,7 +36,7 @@ const demoListings: MarketplaceListing[] = [
     currency_available: 'ECUSD',
     currency_wanted: 'RUB',
     amount: 350,
-    exchange_rate: 90.5,
+    exchange_rate: 0.01105,
     created_at: new Date().toISOString(),
   },
   {
@@ -48,7 +48,7 @@ const demoListings: MarketplaceListing[] = [
     currency_available: 'RUB',
     currency_wanted: 'ECUSD',
     amount: 250,
-    exchange_rate: 0.011,
+    exchange_rate: 90.91,
     created_at: new Date().toISOString(),
   },
   {
@@ -60,7 +60,7 @@ const demoListings: MarketplaceListing[] = [
     currency_available: 'EUR',
     currency_wanted: 'RUB',
     amount: 500,
-    exchange_rate: 98.2,
+    exchange_rate: 0.0101833,
     created_at: new Date().toISOString(),
   },
 ]

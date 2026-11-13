@@ -3,11 +3,14 @@ import { createListing } from '../lib/listings'
 import { currencyName, supportedCurrencies } from '../lib/currencies'
 
 export function ListingForm({
+  displayName,
   onListingCreated,
 }: {
+  displayName: string
   onListingCreated: (currencyAvailable: string, currencyWanted: string) => void
 }) {
-  const [advertiserName, setAdvertiserName] = useState('')
+  const [advertiserNameOverride, setAdvertiserNameOverride] = useState<string | null>(null)
+  const advertiserName = advertiserNameOverride ?? displayName
   const [whatsappNumber, setWhatsappNumber] = useState('')
   const [currencyAvailable, setCurrencyAvailable] = useState('RUB')
   const [currencyWanted, setCurrencyWanted] = useState('ECUSD')
@@ -63,7 +66,7 @@ export function ListingForm({
           <input
             autoComplete="nickname"
             maxLength={80}
-            onChange={(event) => setAdvertiserName(event.target.value)}
+            onChange={(event) => setAdvertiserNameOverride(event.target.value)}
             required
             value={advertiserName}
           />
@@ -88,14 +91,19 @@ export function ListingForm({
             <select
               onChange={(event) => {
                 const nextCurrency = event.target.value
-                setCurrencyAvailable(nextCurrency)
                 const nextWantedCurrencies = nextCurrency === 'RUB'
                   ? ['ECUSD']
                   : nextCurrency === 'ECUSD'
                     ? ['RUB']
                     : ['RUB', 'ECUSD']
-                if (!nextWantedCurrencies.includes(currencyWanted)) {
-                  setCurrencyWanted(nextWantedCurrencies[0])
+                const nextCurrencyWanted = nextWantedCurrencies.includes(currencyWanted)
+                  ? currencyWanted
+                  : nextWantedCurrencies[0]
+                setCurrencyAvailable(nextCurrency)
+                setCurrencyWanted(nextCurrencyWanted)
+                if (nextCurrency !== currencyAvailable) setAmount('')
+                if (nextCurrency !== currencyAvailable || nextCurrencyWanted !== currencyWanted) {
+                  setExchangeRate('')
                 }
               }}
               value={currencyAvailable}
@@ -106,7 +114,11 @@ export function ListingForm({
           <label>
             I want
             <select
-              onChange={(event) => setCurrencyWanted(event.target.value)}
+              onChange={(event) => {
+                const nextCurrency = event.target.value
+                setCurrencyWanted(nextCurrency)
+                if (nextCurrency !== currencyWanted) setExchangeRate('')
+              }}
               value={currencyWanted}
             >
               {wantedCurrencies.map((code) => <option key={code} value={code}>{currencyName(code)}</option>)}
@@ -126,7 +138,7 @@ export function ListingForm({
             />
           </label>
           <label>
-            Rate
+            Rate ({currencyName(currencyAvailable)} per 1 {currencyName(currencyWanted)})
             <input
               aria-describedby="rate-help"
               min="0.00000001"
@@ -139,7 +151,7 @@ export function ListingForm({
           </label>
         </div>
         <p className="field-help" id="rate-help">
-          Rate means {currencyName(currencyWanted)} per 1 {currencyName(currencyAvailable)}.
+          Enter how many {currencyName(currencyAvailable)} you offer for each 1 {currencyName(currencyWanted)}.
         </p>
         {error && <p className="error-message" role="alert">{error}</p>}
         <button className="primary-button" disabled={isSubmitting} type="submit">

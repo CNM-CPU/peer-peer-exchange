@@ -25,13 +25,13 @@ Apply any migrations you have not already run, in order, using the Supabase CLI 
 
 Enable the email provider in Supabase Auth and add the app URL to its redirect allow-list. The app supports password and email-link sign-up/sign-in, password recovery, and email-change confirmation. New users must confirm their email before the session is established. The profile migration adds private avatar storage and owner-only advert editing/removal for available adverts.
 
-Advertiser contact details are available to authenticated users viewing available listings with a valid WhatsApp number. Existing listings without a number remain hidden until the advertiser's contact details are added. A listing's `exchange_rate` means **want currency per one unit of available currency** (for example, `1 RUB = 0.011 ECUSD`). The selector finds listings in the opposite direction and sorts by ascending `exchange_rate`, so the user pays less of their currency per unit received.
+Advertiser contact details are available to authenticated users viewing available listings with a valid WhatsApp number. Existing listings without a number remain hidden until the advertiser's contact details are added. A listing's `exchange_rate` means **available currency per one unit of wanted currency** (for example, `1 EcoCash USD = 89 RUB`). The selector finds listings in the opposite direction and sorts by descending `exchange_rate`, so the best amount received per unit paid appears first.
 
 Pressing **Contact on WhatsApp** atomically reserves the listing for 20 minutes before opening a prefilled WhatsApp message. This global reservation removes it from all users' available listings. The user can mark the reservation completed after arranging the exchange. If left unconfirmed, polling marks it expired, then makes it available again. Authenticated clients poll every 15 seconds; listings update for other active users within that interval.
 
 Listings should store international WhatsApp numbers in E.164 format, such as `+263771234567`. The `ECUSD` currency code is used for EcoCash USD, distinct from cash USD.
 
-Signed-in users can publish adverts from **Add advert**. The advertiser's rate is want-currency per one available-currency unit. Their advert appears to other users searching the opposite direction; users do not see their own advert as a contactable listing.
+Signed-in users can publish adverts from **Add advert**. The advertiser's rate is available-currency per one wanted-currency unit. Their advert appears to other users searching the opposite direction; users do not see their own advert as a contactable listing. The advertiser name is prefilled from the account display name and can be edited before publishing.
 
 The hamburger menu provides **Marketplace**, **Add advert**, and **My adverts** for signed-in users, plus **Admin dashboard** for admins. The account menu provides account settings, password reset, and sign-out. Account settings support display name, email confirmation, password updates, and a private profile picture.
 
