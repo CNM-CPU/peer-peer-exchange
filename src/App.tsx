@@ -4,13 +4,22 @@ import {
   ArrowDownUp,
   Bell,
   CircleAlert,
+  KeyRound,
+  LayoutList,
   LoaderCircle,
+  LogIn,
+  LogOut,
   Menu,
+  Plus,
+  Search,
+  Settings,
   ShieldCheck,
   UserRound,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { AuthPanel, type AuthMode } from './components/AuthPanel'
+import { BrandLogo } from './components/BrandLogo'
 import {
   completeListing,
   loadListings,
@@ -519,6 +528,7 @@ function App() {
 
   return (
     <main className="screen">
+      {(session || isPreviewMode) && authMode !== 'update-password' && (
       <header className="app-header" ref={appHeaderRef}>
         <div className="header-start">
           <div className="popover-anchor">
@@ -539,27 +549,53 @@ function App() {
             {isNavigationOpen && (
               <nav aria-label="Primary navigation" className="header-popover navigation-popover" id="primary-navigation">
                 {(session || isPreviewMode) && (
-                  <button aria-current={view === 'marketplace' ? 'page' : undefined} onClick={() => openView('marketplace')} type="button">Marketplace</button>
+                  <>
+                    <p className="menu-section-label">Marketplace</p>
+                    <button aria-current={view === 'marketplace' ? 'page' : undefined} onClick={() => openView('marketplace')} type="button">
+                      <Search aria-hidden="true" size={16} />
+                      <span>Browse offers</span>
+                    </button>
+                    {session && (
+                      <button aria-current={view === 'create' ? 'page' : undefined} onClick={() => openView('create')} type="button">
+                        <Plus aria-hidden="true" size={16} />
+                        <span>Create an ad</span>
+                      </button>
+                    )}
+                    {session && (
+                      <button aria-current={view === 'my-adverts' ? 'page' : undefined} onClick={() => openView('my-adverts')} type="button">
+                        <LayoutList aria-hidden="true" size={16} />
+                        <span>My ads</span>
+                      </button>
+                    )}
+                  </>
                 )}
-                {session && (
-                  <button aria-current={view === 'create' ? 'page' : undefined} onClick={() => openView('create')} type="button">Add advert</button>
+                {isAdmin && (
+                  <>
+                    <p className="menu-section-label">Account</p>
+                    <button aria-current={view === 'admin' ? 'page' : undefined} onClick={() => openView('admin')} type="button">
+                      <ShieldCheck aria-hidden="true" size={16} />
+                      <span>Admin dashboard</span>
+                    </button>
+                  </>
                 )}
-                {session && (
-                  <button aria-current={view === 'my-adverts' ? 'page' : undefined} onClick={() => openView('my-adverts')} type="button">My adverts</button>
-                )}
-                {isAdmin && <button aria-current={view === 'admin' ? 'page' : undefined} onClick={() => openView('admin')} type="button">Admin dashboard</button>}
                 {!session && !isPreviewMode && (
                   <>
-                    <button onClick={() => openAuth('sign-in')} type="button">Sign in</button>
-                    <button onClick={() => openAuth('sign-up')} type="button">Create account</button>
+                    <p className="menu-section-label">Account</p>
+                    <button onClick={() => openAuth('sign-in')} type="button">
+                      <LogIn aria-hidden="true" size={16} />
+                      <span>Sign in</span>
+                    </button>
+                    <button onClick={() => openAuth('sign-up')} type="button">
+                      <UserPlus aria-hidden="true" size={16} />
+                      <span>Create account</span>
+                    </button>
                   </>
                 )}
               </nav>
             )}
           </div>
-          <a aria-label="Peer Exchange home" className="brand" href="#top">
-            <span className="brand-mark" aria-hidden="true">↔</span>
-            <span>peer<span className="brand-accent">exchange</span></span>
+          <a aria-label="KuSwap home" className="brand" href="#top">
+            <BrandLogo className="brand-logo" />
           </a>
         </div>
         <div className="header-actions">
@@ -663,14 +699,29 @@ function App() {
                   </div>
                   {session ? (
                     <>
-                      <button className="account-signout" onClick={() => openView('profile')} type="button">Account settings</button>
-                      <button className="account-signout account-reset" onClick={() => { void handleAccountPasswordReset() }} type="button">Reset password</button>
-                      <button className="account-signout" onClick={() => { void handleSignOut() }} type="button">Sign out</button>
+                      <button className="account-signout" onClick={() => openView('profile')} type="button">
+                        <Settings aria-hidden="true" size={16} />
+                        <span>Account settings</span>
+                      </button>
+                      <button className="account-signout account-reset" onClick={() => { void handleAccountPasswordReset() }} type="button">
+                        <KeyRound aria-hidden="true" size={16} />
+                        <span>Reset password</span>
+                      </button>
+                      <button className="account-signout" onClick={() => { void handleSignOut() }} type="button">
+                        <LogOut aria-hidden="true" size={16} />
+                        <span>Sign out</span>
+                      </button>
                     </>
                   ) : !isPreviewMode ? (
                     <>
-                      <button className="account-signout" onClick={() => openAuth('sign-in')} type="button">Sign in</button>
-                      <button className="account-signout" onClick={() => openAuth('sign-up')} type="button">Create account</button>
+                      <button className="account-signout" onClick={() => openAuth('sign-in')} type="button">
+                        <LogIn aria-hidden="true" size={16} />
+                        <span>Sign in</span>
+                      </button>
+                      <button className="account-signout" onClick={() => openAuth('sign-up')} type="button">
+                        <UserPlus aria-hidden="true" size={16} />
+                        <span>Create account</span>
+                      </button>
                     </>
                   ) : null}
                 </section>
@@ -678,6 +729,7 @@ function App() {
             </div>
         </div>
       </header>
+      )}
       {session && isSuspended ? (
         <section className="urgent-banner" role="alert">
           <CircleAlert aria-hidden="true" size={18} />
@@ -713,7 +765,7 @@ function App() {
         className={session || isPreviewMode ? 'page-intro' : 'page-intro page-intro-auth'}
         id="top"
       >
-        <p className="eyebrow">Peer Exchange</p>
+        <p className="eyebrow">KuSwap · Set your rate</p>
         <h1 id="page-title">
           {view === 'create'
             ? 'Share an advert'

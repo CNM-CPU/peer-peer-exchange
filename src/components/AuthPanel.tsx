@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { BrandLogo } from './BrandLogo'
 import { supabase } from '../lib/supabase'
 
 export type AuthMode = 'sign-in' | 'sign-up' | 'reset-password' | 'update-password'
@@ -108,6 +109,9 @@ export function AuthPanel({ mode, onModeChange, onPreview }: AuthPanelProps) {
   if (!supabase) {
     return (
       <section aria-labelledby="sign-in-title" className="auth-panel" id="auth-panel">
+        <div className="auth-logo-wrap">
+          <BrandLogo className="auth-logo" />
+        </div>
         <h2 id="sign-in-title">Sign in to Peer Exchange</h2>
         <p>We’re unable to connect to account services at the moment.</p>
         <div className="error-message" role="alert">
@@ -134,6 +138,9 @@ export function AuthPanel({ mode, onModeChange, onPreview }: AuthPanelProps) {
 
   return (
     <section aria-labelledby="sign-in-title" className="auth-panel" id="auth-panel">
+      <div className="auth-logo-wrap">
+        <BrandLogo className="auth-logo" />
+      </div>
       {!isRecovery && !isResetRequest && (
         <div aria-label="Account access" className="auth-tabs" role="group">
           <button
